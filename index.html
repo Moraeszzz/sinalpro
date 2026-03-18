@@ -166,6 +166,27 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
   font-size:16px;padding:4px;transition:color .2s;line-height:1;}
 .channel-item-del:hover{color:var(--red);}
 .channel-check{width:18px;height:18px;cursor:pointer;accent-color:var(--accent);flex-shrink:0;}
+/* USERS */
+.user-card{background:var(--bg);border:1px solid var(--border);border-radius:14px;
+  padding:16px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;transition:border-color .2s;}
+.user-card:hover{border-color:var(--border);}
+.user-avatar{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;
+  justify-content:center;font-size:18px;flex-shrink:0;font-weight:800;
+  background:rgba(124,58,237,.2);color:#a78bfa;}
+.user-info{flex:1;min-width:0;}
+.user-name{font-size:14px;font-weight:800;color:var(--text);}
+.user-login{font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-top:2px;}
+.user-role-badge{padding:4px 12px;border-radius:100px;font-size:10px;font-family:var(--font-mono);font-weight:700;
+  background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.2);color:var(--accent);}
+.user-actions{display:flex;gap:8px;}
+.user-edit-btn{background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.2);color:var(--accent);
+  border-radius:8px;padding:7px 14px;font-size:11px;font-weight:700;cursor:pointer;transition:all .2s;font-family:var(--font-head);}
+.user-edit-btn:hover{background:rgba(0,212,255,.16);}
+.user-del-btn{background:rgba(255,61,90,.08);border:1px solid rgba(255,61,90,.2);color:var(--red);
+  border-radius:8px;padding:7px 14px;font-size:11px;font-weight:700;cursor:pointer;transition:all .2s;font-family:var(--font-head);}
+.user-del-btn:hover{background:rgba(255,61,90,.16);}
+.user-status-dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0;}
+.user-status-dot.inactive{background:var(--muted);}
 .btn-secondary{background:var(--bg);border:1px solid var(--border);color:var(--muted);font-size:12px;padding:10px 16px;width:auto;}
 .btn-secondary:hover{border-color:var(--accent);color:var(--text);}
 .btn-danger{background:rgba(255,61,90,.08);border:1px solid rgba(255,61,90,.3);color:var(--red);font-size:12px;padding:10px 16px;width:auto;}
@@ -422,54 +443,107 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
 </div>
 
 <script>
-// ── LOGIN ──────────────────────────────────────────────────────
+// ── LOGIN COM SUPORTE A MÚLTIPLOS USUÁRIOS ─────────────────────
 (function(){
-  // Credenciais
-  const VALID_USER = 'palpita.io';
-  const VALID_PASS = 'Zetslife@2026';
   const SESSION_KEY = 'sp_auth';
+  const SESSION_USER = 'sp_user';
+  const SESSION_ROLE = 'sp_role';
+
+  // Admin fixo
+  const ADMIN = { user: 'palpita.io', pass: 'Zetslife@2026', role: 'admin' };
 
   // Se já logado nesta sessão, esconde imediatamente
+  const savedRole = sessionStorage.getItem(SESSION_ROLE);
   if(sessionStorage.getItem(SESSION_KEY)==='1'){
     document.getElementById('loginScreen').style.display='none';
+    window.__userRole = savedRole || 'admin';
+    window.__userName = sessionStorage.getItem(SESSION_USER) || 'palpita.io';
+    // Esconde aba usuários se não for admin
+    if(savedRole !== 'admin') setTimeout(hideAdminTabs, 200);
   }
 
-  window.doLogin = function(){
-    const user = document.getElementById('loginUser').value.trim();
-    const pass = document.getElementById('loginPass').value;
+  window.doLogin = async function(){
+    const user  = document.getElementById('loginUser').value.trim();
+    const pass  = document.getElementById('loginPass').value;
     const errEl = document.getElementById('loginError');
     const btn   = document.getElementById('loginBtn');
     const uInp  = document.getElementById('loginUser');
     const pInp  = document.getElementById('loginPass');
 
-    // Reset visual
     uInp.classList.remove('error');
     pInp.classList.remove('error');
     errEl.classList.remove('show');
+    btn.textContent = '⏳ Verificando...';
+    btn.disabled = true;
 
-    if(user === VALID_USER && pass === VALID_PASS){
-      sessionStorage.setItem(SESSION_KEY,'1');
+    let matched = null;
+
+    // Checa admin
+    if(user === ADMIN.user && pass === ADMIN.pass){
+      matched = { role: 'admin', user: ADMIN.user };
+    } else {
+      // Checa usuários do Firebase
+      try {
+        const { getFirestore, collection, getDocs } = await import("https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js");
+        const { initializeApp, getApps } = await import("https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js");
+        const firebaseConfig = {
+          apiKey:"AIzaSyBTi4cX6Utgc1lYPjE0Pv6hnG5Xnolb_Uk",
+          authDomain:"sinalpro-669cd.firebaseapp.com",
+          projectId:"sinalpro-669cd",
+          storageBucket:"sinalpro-669cd.firebasestorage.app",
+          messagingSenderId:"665424757910",
+          appId:"1:665424757910:web:05f6ddfdc5c8123381aeb7"
+        };
+        const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+        const db  = getFirestore(app);
+        const snap = await getDocs(collection(db, 'usuarios'));
+        snap.forEach(d => {
+          const data = d.data();
+          if(data.user === user && data.pass === pass && data.ativo !== false){
+            matched = { role: data.role || 'parceiro', user: data.user, nome: data.nome };
+          }
+        });
+      } catch(e){ /* Firebase offline — só admin funciona */ }
+    }
+
+    if(matched){
+      sessionStorage.setItem(SESSION_KEY, '1');
+      sessionStorage.setItem(SESSION_USER, matched.user);
+      sessionStorage.setItem(SESSION_ROLE, matched.role);
+      window.__userRole = matched.role;
+      window.__userName = matched.user;
       btn.textContent = '✅ Entrando...';
-      btn.disabled = true;
       const screen = document.getElementById('loginScreen');
       screen.classList.add('login-fadeout');
-      setTimeout(()=>screen.style.display='none', 420);
+      setTimeout(()=>{
+        screen.style.display='none';
+        if(matched.role !== 'admin') hideAdminTabs();
+      }, 420);
     } else {
+      btn.textContent = '🔐 Entrar';
+      btn.disabled = false;
       uInp.classList.add('error');
       pInp.classList.add('error');
       errEl.classList.add('show');
-      // Shake animation
       const card = document.querySelector('.login-card');
-      card.style.animation='none';
       card.style.transform='translateX(-6px)';
       setTimeout(()=>{card.style.transform='translateX(6px)';},80);
       setTimeout(()=>{card.style.transform='translateX(-4px)';},160);
       setTimeout(()=>{card.style.transform='translateX(4px)';},240);
       setTimeout(()=>{card.style.transform='';},320);
-      // Limpa a senha
-      pInp.value='';
-      pInp.focus();
+      pInp.value=''; pInp.focus();
     }
+  };
+
+  // Parceiros veem Gerador, Histórico, Templates e Bot
+  // Ocultam apenas Usuários e Config
+  window.hideAdminTabs = function(){
+    document.querySelectorAll('.tab-btn').forEach(b => {
+      const txt = b.textContent;
+      if(txt.includes('Usuários') || txt.includes('Config')){
+        b.style.display = 'none';
+      }
+    });
   };
 
   window.togglePass = function(){
@@ -479,7 +553,6 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
     else{inp.type='password';btn.textContent='👁';}
   };
 
-  // Foca no campo usuário ao carregar
   window.addEventListener('load',()=>{
     if(sessionStorage.getItem(SESSION_KEY)!=='1'){
       setTimeout(()=>document.getElementById('loginUser').focus(),100);
@@ -514,6 +587,7 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
   <button class="tab-btn" onclick="switchTab('historico',this)">🕒 <span class="tab-label">Histórico</span> <span class="tab-badge" id="histBadge">0</span></button>
   <button class="tab-btn" onclick="switchTab('templates',this)">📋 <span class="tab-label">Templates</span> <span class="tab-badge" id="tplBadge">0</span></button>
   <button class="tab-btn" onclick="switchTab('bot',this)">🤖 <span class="tab-label">Bot</span></button>
+  <button class="tab-btn" onclick="switchTab('usuarios',this)">👥 <span class="tab-label">Usuários</span></button>
   <button class="tab-btn" onclick="switchTab('config',this)">⚙️ <span class="tab-label">Config</span></button>
 </nav>
 
@@ -748,6 +822,100 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
   <button class="config-save-btn" onclick="saveBotConfig()">💾 Salvar Configurações do Bot</button>
 </div>
 
+<!-- ══ USUÁRIOS ══ -->
+<div class="page" id="page-usuarios">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin:4px 0 24px;flex-wrap:wrap;gap:12px;">
+    <div>
+      <h2 style="font-size:18px;font-weight:800;">👥 Gerenciar Usuários</h2>
+      <p style="font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-top:4px;">Parceiros com acesso à plataforma — salvos no Firebase</p>
+    </div>
+    <button class="btn btn-secondary" style="width:auto;" onclick="openAddUser()">＋ Criar Usuário</button>
+  </div>
+
+  <!-- ADMIN FIXO -->
+  <div style="background:linear-gradient(135deg,rgba(245,200,66,.08),rgba(124,58,237,.08));
+    border:1px solid rgba(245,200,66,.3);border-radius:14px;padding:18px 20px;margin-bottom:20px;
+    display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+    <div style="width:42px;height:42px;background:linear-gradient(135deg,var(--gold),var(--accent3));
+      border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">👑</div>
+    <div style="flex:1;">
+      <div style="font-size:14px;font-weight:800;color:var(--gold);">palpita.io</div>
+      <div style="font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-top:2px;">Administrador Master — acesso total</div>
+    </div>
+    <div style="background:rgba(245,200,66,.15);border:1px solid rgba(245,200,66,.3);
+      color:var(--gold);padding:4px 12px;border-radius:100px;font-size:10px;font-family:var(--font-mono);font-weight:700;">
+      ADMIN
+    </div>
+  </div>
+
+  <!-- LISTA PARCEIROS -->
+  <div id="userGrid" style="display:flex;flex-direction:column;gap:12px;">
+    <div style="text-align:center;padding:40px;color:var(--muted);font-family:var(--font-mono);font-size:12px;">
+      ⏳ Carregando usuários...
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Criar/Editar Usuário -->
+<div class="modal-overlay" id="addUserOverlay" onclick="closeUserModal(event)">
+  <div class="modal">
+    <button class="modal-close" onclick="document.getElementById('addUserOverlay').classList.remove('show')">✕</button>
+    <div class="modal-title" id="userModalTitle">➕ Criar Usuário Parceiro</div>
+
+    <div class="modal-field">
+      <label class="modal-label">Nome (exibição)</label>
+      <input type="text" id="uNome" placeholder="Ex: Canal VIP do João"
+        style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;
+        color:var(--text);font-family:var(--font-head);font-size:14px;padding:11px 15px;outline:none;">
+    </div>
+    <div class="modal-field">
+      <label class="modal-label">Usuário (login)</label>
+      <input type="text" id="uUser" placeholder="Ex: canal.vip"
+        style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;
+        color:var(--text);font-family:var(--font-mono);font-size:13px;padding:11px 15px;outline:none;"
+        autocomplete="off">
+    </div>
+    <div class="modal-field">
+      <label class="modal-label">Senha</label>
+      <div style="position:relative;">
+        <input type="password" id="uPass" placeholder="Mínimo 6 caracteres"
+          style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;
+          color:var(--text);font-family:var(--font-mono);font-size:13px;padding:11px 42px 11px 15px;outline:none;"
+          autocomplete="new-password">
+        <button onclick="toggleUPass()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);
+          background:none;border:none;color:var(--muted);cursor:pointer;font-size:15px;" id="uPassEye">👁</button>
+      </div>
+    </div>
+    <div class="modal-field">
+      <label class="modal-label">Nível de Acesso</label>
+      <select id="uRole" style="width:100%;background:var(--bg);border:1px solid var(--border);
+        border-radius:10px;color:var(--text);font-family:var(--font-head);font-size:14px;
+        padding:11px 15px;outline:none;appearance:none;">
+        <option value="parceiro">🤝 Parceiro — acesso ao Gerador apenas</option>
+      </select>
+    </div>
+
+    <div style="background:rgba(0,212,255,.05);border:1px solid rgba(0,212,255,.15);border-radius:10px;
+      padding:12px 14px;margin-bottom:14px;font-size:11px;color:var(--muted);font-family:var(--font-mono);line-height:1.7;">
+      ℹ️ O usuário parceiro terá acesso ao <strong style="color:var(--text);">Gerador, Histórico, Templates e Bot</strong> — com dados próprios e isolados.<br>
+      As abas <strong style="color:var(--text);">Usuários</strong> e <strong style="color:var(--text);">Config</strong> ficam restritas ao Admin.<br>
+      O Admin pode inspecionar os dados de qualquer parceiro a qualquer momento.
+    </div>
+
+    <input type="hidden" id="uEditId">
+    <button class="btn btn-primary" onclick="saveUser()">💾 Salvar Usuário</button>
+  </div>
+</div>
+
+<!-- MODAL: Inspecionar Usuário (admin) -->
+<div class="modal-overlay" id="inspectOverlay" onclick="if(event.target.id==='inspectOverlay')document.getElementById('inspectOverlay').classList.remove('show')">
+  <div class="modal" style="max-width:640px;">
+    <button class="modal-close" onclick="document.getElementById('inspectOverlay').classList.remove('show')">✕</button>
+    <div class="modal-title" id="inspectModalTitle">🔍 Inspecionando Usuário</div>
+    <div id="inspectContent" style="max-height:65vh;overflow-y:auto;padding-right:4px;"></div>
+  </div>
+</div>
+
 <!-- ══ CONFIG ══ -->
 <div class="page" id="page-config">
   <div style="margin:4px 0 24px;">
@@ -881,10 +1049,573 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db  = getFirestore(app);
 
-// ── COLEÇÕES ──────────────────────────────────────────────
-const COL_HIST = "historico";
-const COL_TPLS = "templates";
-const DOC_CFG  = "config/geral";
+// ══════════════════════════════════════════════════════════════
+// ARQUITETURA DE DADOS — isolamento por usuário
+// usuarios/{userId}/historico/{docId}
+// usuarios/{userId}/templates/{docId}
+// usuarios/{userId}/bot/config
+// usuarios/{userId}/config/geral
+// usuarios_cadastros/{docId}   ← lista de usuários (admin)
+// ══════════════════════════════════════════════════════════════
+
+// Retorna o userId ativo (admin usa 'admin', parceiros usam seu login)
+function uid(){ return window.__userName || 'admin'; }
+function isAdmin(){ return window.__userRole === 'admin'; }
+
+// Atalhos de coleção/doc por usuário
+function uCol(path){ return collection(db, `usuarios/${uid()}/${path}`); }
+function uDoc(path){ return doc(db, `usuarios/${uid()}/${path}`); }
+// Admin inspecionando outro usuário
+function uColAs(user,path){ return collection(db, `usuarios/${user}/${path}`); }
+function uDocAs(user,path){ return doc(db, `usuarios/${user}/${path}`); }
+
+// ── STATUS ────────────────────────────────────────────────
+function setDbStatus(state){
+  const dots  = [document.getElementById('dbDot'), document.getElementById('cfgDbDot')];
+  const labels= [document.getElementById('dbLabel'), document.getElementById('cfgDbLabel')];
+  const cfgDesc = document.getElementById('cfgDbStatus');
+  dots.forEach(d=>{if(d) d.className='db-dot '+state;});
+  const txt = state==='online'?'🟢 Conectado':state==='offline'?'🔴 Sem conexão':'⏳ Conectando...';
+  labels.forEach(l=>{if(l) l.textContent=txt;});
+  if(cfgDesc) cfgDesc.textContent =
+    state==='online' ?'Firebase Firestore ativo — dados sincronizados na nuvem.'
+    :state==='offline'?'Sem conexão com Firebase. Verifique sua internet.'
+    :'Verificando conexão com Firebase...';
+}
+
+// ── HISTÓRICO ─────────────────────────────────────────────
+let histCache=[], histFilter='all';
+
+async function loadHistory(targetUser=null){
+  try {
+    setDbStatus('loading');
+    const col = targetUser ? uColAs(targetUser,'historico') : uCol('historico');
+    const q   = query(col, orderBy("ts","desc"));
+    const snap= await getDocs(q);
+    histCache = snap.docs.map(d=>({id:d.id,...d.data()}));
+    setDbStatus('online');
+    updateStatsBadges();
+    renderHistory();
+  } catch(e){
+    setDbStatus('offline');
+    showToast('❌ Erro ao carregar histórico: '+e.message,'error');
+  }
+}
+
+async function saveToHistory(entry){
+  try {
+    const ref = await addDoc(uCol('historico'),{...entry, ts:serverTimestamp()});
+    histCache.unshift({id:ref.id,...entry});
+    if(histCache.length>30) histCache=histCache.slice(0,30);
+    updateStatsBadges();
+    const cnt=parseInt(localStorage.getItem('spCount_'+uid())||'0')+1;
+    localStorage.setItem('spCount_'+uid(),cnt);
+    document.getElementById('totalSignals').textContent=cnt;
+  } catch(e){ showToast('⚠️ Sinal gerado mas não salvo na nuvem.','error'); }
+}
+
+window.filterHistory=function(f,btn){
+  histFilter=f;
+  document.querySelectorAll('.hist-filter').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); renderHistory();
+};
+
+window.renderHistory=function(){
+  let list=histCache;
+  if(histFilter!=='all') list=list.filter(e=>e.ev&&e.ev.includes(histFilter));
+  const grid=document.getElementById('histGrid');
+  document.getElementById('histBadge').textContent=histCache.length;
+  document.getElementById('histCount').textContent=histCache.length;
+  if(!list.length){grid.innerHTML=`<div class="hist-empty">Nenhum sinal encontrado.</div>`;return;}
+  grid.innerHTML=list.map((item,i)=>`
+    <div class="hist-card" onclick="openModal(${i})">
+      <button class="hist-card-del" onclick="event.stopPropagation();deleteHist('${item.id}',${i})">✕</button>
+      <div class="hist-card-top">
+        <div class="hist-card-title">${esc(item.label||'Sinal')}</div>
+        <div class="hist-card-time">${esc(item.timeStr||'')}</div>
+      </div>
+      <div class="hist-card-result">${esc(item.resultado||'—')}</div>
+      <div class="hist-card-conf">🛡 Confiança: ${esc(item.conf||'—')}%</div>
+    </div>`).join('');
+};
+
+window.deleteHist=async function(docId,idx){
+  if(!confirm('Remover este sinal?'))return;
+  try{
+    await deleteDoc(doc(db,`usuarios/${uid()}/historico`,docId));
+    histCache.splice(idx,1); updateStatsBadges(); renderHistory();
+    showToast('🗑 Sinal removido.');
+  }catch(e){showToast('❌ Erro: '+e.message,'error');}
+};
+
+window.clearHistory=async function(){
+  if(!confirm('Apagar TODO o histórico?'))return;
+  try{
+    const snap=await getDocs(uCol('historico'));
+    await Promise.all(snap.docs.map(d=>deleteDoc(doc(db,`usuarios/${uid()}/historico`,d.id))));
+    histCache=[];updateStatsBadges();renderHistory();showToast('🗑 Histórico apagado.');
+  }catch(e){showToast('❌ Erro: '+e.message,'error');}
+};
+
+window.exportHistory=function(){
+  if(!histCache.length){showToast('Nenhum sinal para exportar.','info');return;}
+  const txt=histCache.map((e,i)=>`=== Sinal #${i+1} — ${e.timeStr} ===\n${e.tg||''}`).join('\n\n'+'─'.repeat(40)+'\n\n');
+  const blob=new Blob([txt],{type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='sinais-'+uid()+'-'+new Date().toISOString().slice(0,10)+'.txt';
+  a.click(); showToast('⬇ Exportado!');
+};
+
+// ── MODAL HISTÓRICO ───────────────────────────────────────
+let modalText='';
+window.openModal=function(i){
+  const item=histCache[i];if(!item)return;
+  document.getElementById('modalTitle').textContent=item.label||'Sinal';
+  document.getElementById('modalPreview').textContent=item.tg||'';
+  modalText=item.tg||'';
+  document.getElementById('modalOverlay').classList.add('show');
+};
+window.closeModal=function(e){if(e.target.id==='modalOverlay')window.closeModalDirect();};
+window.closeModalDirect=function(){document.getElementById('modalOverlay').classList.remove('show');};
+window.copyModal=function(){
+  if(!modalText)return;
+  navigator.clipboard.writeText(modalText).then(()=>showToast('✅ Copiado!')).catch(()=>fallbackCopy(modalText));
+};
+
+// ── TEMPLATES ─────────────────────────────────────────────
+const DEFAULT_TEMPLATES=[
+  {id:'d-btc-sobe',custom:false,color:'green',icon:'₿',name:'Bitcoin SOBE',desc:'Sinal de alta para Bitcoin em 5 minutos.',preview:'**🔥 SINAL FORTE — 🪙 Bitcoin**\n__🎯 Resultado:__ **SOBE 📈**',ev:'bitcoin',pos:'SOBE 📈'},
+  {id:'d-btc-desce',custom:false,color:'red',icon:'📉',name:'Bitcoin DESCE',desc:'Sinal de baixa para Bitcoin em 5 minutos.',preview:'**🚨 ALERTA MÁXIMO — 🪙 Bitcoin**\n__🎯 Resultado:__ **DESCE 📉**',ev:'bitcoin',pos:'DESCE 📉'},
+  {id:'d-rod-mais',custom:false,color:'blue',icon:'🚗',name:'Rodovia MAIS DE',desc:'Quantidade alta de carros.',preview:'**⚡ OPORTUNIDADE — 🚗 Rodovia**\n__🎯 Resultado:__ **MAIS DE X CARROS**',ev:'rodovia',pos:'MAIS DE'},
+  {id:'d-rod-menos',custom:false,color:'red',icon:'🚗',name:'Rodovia MENOS DE',desc:'Quantidade baixa de carros.',preview:'**💎 ENTRADA PREMIUM — 🚗 Rodovia**\n__🎯 Resultado:__ **MENOS DE X CARROS**',ev:'rodovia',pos:'MENOS DE'},
+  {id:'d-fut-a',custom:false,color:'green',icon:'⚽',name:'Futebol — Time A',desc:'Vitória do Time A.',preview:'**🔥 SINAL FORTE — ⚽ Futebol**\n__🎯 Resultado:__ **TIME A VENCE 🏆**',ev:'futebol',pos:'A'},
+  {id:'d-fut-b',custom:false,color:'red',icon:'⚽',name:'Futebol — Time B',desc:'Vitória do Time B.',preview:'**💥 RUPTURA — ⚽ Futebol**\n__🎯 Resultado:__ **TIME B VENCE 🏆**',ev:'futebol',pos:'B'},
+  {id:'d-bbb',custom:false,color:'gold',icon:'📺',name:'BBB — Paredão',desc:'Sinal de eliminação do BBB26.',preview:'**🎯 ALVO — 📺 BBB26**\n__🎯 Resultado:__ **X ELIMINADO 🗳️**',ev:'bbb'},
+  {id:'d-temp-rio',custom:false,color:'red',icon:'🌡️',name:'Temperatura RJ',desc:'Rio atingir temperatura alvo.',preview:'**🚨 ALERTA — 🌡️ Temperatura**\n__🏖️ Cidade:__ **RIO DE JANEIRO**',ev:'temp-rio',pos:'ATINGE'},
+];
+let customTemplates=[];
+
+async function loadTemplates(targetUser=null){
+  try{
+    const col = targetUser ? uColAs(targetUser,'templates') : uCol('templates');
+    const snap=await getDocs(col);
+    customTemplates=snap.docs.map(d=>({id:d.id,...d.data(),custom:true}));
+    document.getElementById('tplBadge').textContent=DEFAULT_TEMPLATES.length+customTemplates.length;
+    renderTemplates();
+  }catch(e){renderTemplates();}
+}
+
+window.renderTemplates=function(){
+  const all=[...DEFAULT_TEMPLATES,...customTemplates];
+  document.getElementById('tplBadge').textContent=all.length;
+  document.getElementById('tplGrid').innerHTML=all.map(t=>`
+    <div class="tpl-card ${t.color||'blue'}">
+      ${t.custom?'<div class="tpl-custom-badge">CUSTOM</div>':''}
+      <div class="tpl-icon">${t.icon||'📋'}</div>
+      <div class="tpl-name">${esc(t.name)}</div>
+      <div class="tpl-desc">${esc(t.desc||'')}</div>
+      <div class="tpl-preview">${esc(t.preview||t.texto||'')}</div>
+      <div class="tpl-actions">
+        <button class="tpl-use-btn" onclick="useTemplate('${t.id}')">⚡ Usar</button>
+        ${t.custom?`<button class="tpl-del-btn" onclick="deleteTemplate('${t.id}')">🗑</button>`:''}
+      </div>
+    </div>`).join('');
+};
+
+window.useTemplate=function(id){
+  const all=[...DEFAULT_TEMPLATES,...customTemplates];
+  const t=all.find(x=>x.id===id);if(!t)return;
+  if(t.custom&&t.texto){
+    window.rawSignalText=t.texto;
+    document.getElementById('previewBox').textContent=t.texto;
+    document.getElementById('copyBtn').disabled=false;
+    switchTab('gerador',document.querySelector('.tab-btn'));
+    document.querySelectorAll('.tab-btn').forEach((b,i)=>{b.classList.remove('active');if(i===0)b.classList.add('active');});
+    showToast('📋 Template carregado!');return;
+  }
+  switchTab('gerador',document.querySelector('.tab-btn'));
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>{b.classList.remove('active');if(i===0)b.classList.add('active');});
+  setTimeout(()=>{
+    if(t.ev){document.getElementById('eventType').value=t.ev;window.buildForm();}
+    if(t.pos){setTimeout(()=>{
+      document.querySelectorAll('#dynamicFields .pos-btn').forEach(b=>{
+        if(t.pos==='SOBE 📈'&&b.textContent.includes('SOBE'))b.click();
+        else if(t.pos==='DESCE 📉'&&b.textContent.includes('DESCE'))b.click();
+        else if(t.pos==='MAIS DE'&&b.textContent.includes('MAIS'))b.click();
+        else if(t.pos==='MENOS DE'&&b.textContent.includes('MENOS'))b.click();
+        else if(t.pos==='ATINGE'&&b.textContent.includes('ATINGE'))b.click();
+        else if(t.pos==='A'&&b.id==='posBtnA')b.click();
+        else if(t.pos==='B'&&b.id==='posBtnB')b.click();
+      });
+    },60);}
+    showToast('📋 Template carregado!');
+  },60);
+};
+
+window.deleteTemplate=async function(id){
+  if(!confirm('Remover este template?'))return;
+  try{
+    await deleteDoc(doc(db,`usuarios/${uid()}/templates`,id));
+    customTemplates=customTemplates.filter(t=>t.id!==id);
+    renderTemplates();showToast('🗑 Template removido.');
+  }catch(e){showToast('❌ Erro: '+e.message,'error');}
+};
+
+window.openAddTemplate=function(){
+  document.getElementById('tplNewName').value='';
+  document.getElementById('tplNewIcon').value='';
+  document.getElementById('tplNewDesc').value='';
+  document.getElementById('tplNewText').value=window.rawSignalText||'';
+  document.getElementById('addTplOverlay').classList.add('show');
+};
+window.closeAddTplModal=function(e){if(e.target.id==='addTplOverlay')document.getElementById('addTplOverlay').classList.remove('show');};
+
+window.saveCustomTemplate=async function(){
+  const name=document.getElementById('tplNewName').value.trim();
+  const icon=document.getElementById('tplNewIcon').value.trim()||'📋';
+  const desc=document.getElementById('tplNewDesc').value.trim();
+  const texto=document.getElementById('tplNewText').value.trim();
+  if(!name){showToast('Informe o nome.','error');return;}
+  if(!texto){showToast('Adicione o texto.','error');return;}
+  try{
+    const ref=await addDoc(uCol('templates'),{name,icon,desc,texto,color:'purple',custom:true,preview:texto.slice(0,120),ts:serverTimestamp()});
+    customTemplates.push({id:ref.id,name,icon,desc,texto,color:'purple',custom:true,preview:texto.slice(0,120)});
+    renderTemplates();
+    document.getElementById('addTplOverlay').classList.remove('show');
+    showToast('✅ Template salvo!');
+  }catch(e){showToast('❌ Erro: '+e.message,'error');}
+};
+
+// ── CONFIG ────────────────────────────────────────────────
+let CFG={defaultLink:'',footer:'',showEntrada:true,showRisk:true};
+
+async function loadConfig(targetUser=null){
+  try{
+    const d = targetUser ? uDocAs(targetUser,'config/geral') : uDoc('config/geral');
+    const snap=await getDoc(d);
+    if(snap.exists()) CFG=Object.assign(CFG,snap.data());
+    applyConfigToUI();
+  }catch(e){applyConfigToUI();}
+}
+
+function applyConfigToUI(){
+  document.getElementById('cfgDefaultLink').value=CFG.defaultLink||'';
+  document.getElementById('cfgFooter').value=CFG.footer||'';
+  document.getElementById('cfgEntrada').checked=CFG.showEntrada!==false;
+  document.getElementById('cfgRisk').checked=CFG.showRisk!==false;
+  if(CFG.defaultLink)document.getElementById('eventLink').value=CFG.defaultLink;
+  window.updateLinkPreview&&window.updateLinkPreview();
+}
+
+window.saveConfig=async function(){
+  CFG.defaultLink=document.getElementById('cfgDefaultLink').value.trim();
+  CFG.footer=document.getElementById('cfgFooter').value.trim();
+  CFG.showEntrada=document.getElementById('cfgEntrada').checked;
+  CFG.showRisk=document.getElementById('cfgRisk').checked;
+  try{
+    await setDoc(uDoc('config/geral'),CFG);
+    showToast('☁️ Configurações salvas!');
+  }catch(e){showToast('❌ Erro: '+e.message,'error');}
+};
+
+window.resetAll=async function(){
+  if(!confirm('Apagar TODOS os seus dados da nuvem?'))return;
+  try{
+    const h=await getDocs(uCol('historico'));
+    await Promise.all(h.docs.map(d=>deleteDoc(doc(db,`usuarios/${uid()}/historico`,d.id))));
+    const t=await getDocs(uCol('templates'));
+    await Promise.all(t.docs.map(d=>deleteDoc(doc(db,`usuarios/${uid()}/templates`,d.id))));
+    await deleteDoc(uDoc('config/geral'));
+    await deleteDoc(uDoc('bot/config'));
+    CFG={defaultLink:'',footer:'',showEntrada:true,showRisk:true};
+    histCache=[];customTemplates=[];
+    applyConfigToUI();renderHistory();renderTemplates();updateStatsBadges();
+    localStorage.removeItem('spCount_'+uid());
+    document.getElementById('totalSignals').textContent='0';
+    showToast('🗑 Dados apagados.');
+  }catch(e){showToast('❌ Erro: '+e.message,'error');}
+};
+
+// ── GERADOR ───────────────────────────────────────────────
+const SEP='━━━━━━━━━━━━━━━━━━━━';
+
+function plainSignal(title,lines,url,resultado){
+  const dataLinesMD=lines.map(([k,v])=>`__${k}:__ **${v}**`).join('\n');
+  const entradaMD=CFG.showEntrada?'\n⚡ **Entrada válida AGORA**':'';
+  const riskMD=CFG.showRisk?'\n⚠️ __Palpites envolvem risco.__\n⚠️ __Sinais gerados por análise, podem haver erros.__':'';
+  const footerLine=CFG.footer?`\n\n${CFG.footer}`:'';
+  const tg=`**${title}**\n${SEP}\n__🎯 Resultado:__ **${resultado}**\n${dataLinesMD}\n${SEP}${entradaMD}${riskMD}\n\n👉 **LINK DO EVENTO:**\n${url}${footerLine}`;
+
+  const eH=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const dataLinesHTML=lines.map(([k,v])=>`<u>${eH(k)}:</u> <b>${eH(v)}</b>`).join('\n');
+  const entradaHTML=CFG.showEntrada?'\n⚡ <b>Entrada válida AGORA</b>':'';
+  const riskHTML=CFG.showRisk?'\n⚠️ <i>Palpites envolvem risco.</i>\n⚠️ <i>Sinais gerados por análise, podem haver erros.</i>':'';
+  const footerHTML=CFG.footer?`\n\n${eH(CFG.footer)}`:'';
+  const tgBot=`<b>${eH(title)}</b>\n${SEP}\n<u>🎯 Resultado:</u> <b>${eH(resultado)}</b>\n${dataLinesHTML}\n${SEP}${entradaHTML}${riskHTML}\n\n👉 <b>LINK DO EVENTO:</b>\n${eH(url)}${footerHTML}`;
+
+  const rowsHtml=lines.map(([k,v])=>`<div style="padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05);display:flex;justify-content:space-between;align-items:center;gap:10px;"><span style="font-size:11px;color:var(--muted);text-decoration:underline;text-underline-offset:2px;flex-shrink:0;">${esc(k)}:</span><strong style="font-size:13px;color:#fff;text-align:right;">${esc(v)}</strong></div>`).join('');
+  const html=`<div style="margin-bottom:12px;padding-bottom:12px;border-bottom:2px solid rgba(0,212,255,.15);"><div style="font-size:15px;font-weight:900;color:var(--gold)">${esc(title)}</div></div><div style="background:linear-gradient(135deg,rgba(0,230,118,.13),rgba(0,212,255,.07));border:2px solid rgba(0,230,118,.4);border-radius:12px;padding:14px 18px;margin-bottom:14px;text-align:center;"><div style="font-size:9px;letter-spacing:2px;color:#00e676;text-transform:uppercase;margin-bottom:6px;font-weight:800;">🎯 RESULTADO</div><div style="font-size:20px;font-weight:900;color:#fff;text-shadow:0 0 20px rgba(0,230,118,.5);">${esc(resultado)}</div></div>${rowsHtml}${CFG.showEntrada?`<div style="margin:12px 0 10px;padding:9px 12px;background:rgba(0,212,255,.07);border-radius:9px;border:1px solid rgba(0,212,255,.2);font-size:12px;font-weight:800;color:var(--accent);">⚡ Entrada válida AGORA</div>`:''}${CFG.showRisk?`<div style="background:rgba(251,191,36,.06);border:1px solid rgba(251,191,36,.2);border-radius:9px;padding:9px 13px;margin-bottom:10px;"><div style="font-size:11px;color:#fbbf24;font-style:italic;">⚠️ Palpites envolvem risco.</div><div style="font-size:11px;color:#fbbf24;font-style:italic;margin-top:3px;">⚠️ Sinais gerados por análise, podem haver erros.</div></div>`:''}<div style="background:rgba(0,212,255,.06);border:1px solid rgba(0,212,255,.2);border-radius:9px;padding:10px 13px;"><div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:5px;font-weight:700;">👉 Link do Evento</div><a href="${esc(url)}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:700;word-break:break-all;text-decoration:underline;font-size:12px;">${esc(url)}</a></div>`;
+  return{tg,tgBot,html};
+}
+
+window.rawSignalText='';
+
+window.generateSignal=async function(){
+  const ev=document.getElementById('eventType').value;if(!ev)return;
+  const conf=document.getElementById('confidence').value;
+  const title=TITLES[Math.floor(Math.random()*TITLES.length)];
+  const label=EVENT_LABELS[ev];
+  const url=window.getEventLink();
+  let brt=getBRT(),dateStr=fmtDate(brt),timeStr=fmtTime(brt);
+  if(ev.startsWith('temp-')){const h=brt.getHours(),m=brt.getMinutes();if(h>16||(h===16&&m>=1)){const nxt=new Date(brt);nxt.setDate(nxt.getDate()+1);dateStr=fmtDate(nxt);}}
+  const dt=dateStr+', '+timeStr+' BRT';
+  let r=null,resultado='';
+  if(ev==='bitcoin'){const pos=req('posValue','Selecione a posição!');if(!pos)return;resultado=pos;r=plainSignal(`${title} — 🪙 Bitcoin — 5 minutos`,[['📊 Confiança',conf+'%'],['🕒 Horário',dt]],url,pos);}
+  else if(ev==='rodovia'){const pos=req('posValue','Selecione a posição!');if(!pos)return;const cars=reqN('carCount','Informe os carros!');if(!cars)return;resultado=pos+' '+cars+' CARROS';r=plainSignal(`${title} — 🚗 Rodovia — 5 minutos`,[['📊 Confiança',conf+'%'],['🕒 Horário',dt]],url,resultado);}
+  else if(ev==='futebol'){const tA=reqT('teamA','Time A?');if(!tA)return;const tB=reqT('teamB','Time B?');if(!tB)return;const ch=req('posChoice','Selecione o resultado!');if(!ch)return;resultado=ch==='A'?tA.toUpperCase()+' VENCE 🏆':ch==='B'?tB.toUpperCase()+' VENCE 🏆':'EMPATE 🤝';r=plainSignal(`${title} — ⚽ Futebol`,[['⚽ Jogo',tA.toUpperCase()+' x '+tB.toUpperCase()],['📊 Confiança',conf+'%'],['🕒 Horário',dt]],url,resultado);}
+  else if(ev==='cs2'){const tA=reqT('teamA','Time A?');if(!tA)return;const tB=reqT('teamB','Time B?');if(!tB)return;const ch=req('posChoice','Vencedor?');if(!ch)return;resultado=(ch==='A'?tA:tB).toUpperCase()+' VENCE 🏆';r=plainSignal(`${title} — 🎮 CS2`,[['🎮 Partida',tA.toUpperCase()+' vs '+tB.toUpperCase()],['📊 Confiança',conf+'%'],['🕒 Horário',dt]],url,resultado);}
+  else if(ev==='nba'){const tA=reqT('teamA','Time A?');if(!tA)return;const tB=reqT('teamB','Time B?');if(!tB)return;const ch=req('posChoice','Vencedor?');if(!ch)return;resultado=(ch==='A'?tA:tB).toUpperCase()+' VENCE 🏆';r=plainSignal(`${title} — 🏀 NBA`,[['🏀 Jogo',tA.toUpperCase()+' x '+tB.toUpperCase()],['📊 Confiança',conf+'%'],['🕒 Horário',dt]],url,resultado);}
+  else if(ev==='luta'){const tA=reqT('teamA','Lutador A?');if(!tA)return;const tB=reqT('teamB','Lutador B?');if(!tB)return;const ch=req('posChoice','Vencedor?');if(!ch)return;resultado=(ch==='A'?tA:tB).toUpperCase()+' VENCE 🥊';r=plainSignal(`${title} — 🥊 Luta / MMA`,[['🥊 Luta',tA.toUpperCase()+' vs '+tB.toUpperCase()],['📊 Confiança',conf+'%'],['🕒 Horário',dt]],url,resultado);}
+  else if(ev==='bbb'){const parts=reqT('bbbParts','Participantes?');if(!parts)return;const elim=req('bbbElim','Eliminado?');if(!elim)return;const paredao=parts.split(',').map(n=>n.trim()).filter(Boolean).join(' x ').toUpperCase();resultado=elim.toUpperCase()+' ELIMINADO 🗳️';r=plainSignal(`${title} — 📺 BBB26 Paredão`,[['📺 Paredão',paredao],['📊 Confiança',conf+'%'],['🕒 Horário',dt]],url,resultado);}
+  else if(ev.startsWith('stories-')){const who=ev.includes('carlinhos')?'CARLINHOS':'VIRGINIA';const hour=ev.endsWith('13')?'13H':'19H';const type=req('stType','Tipo?');if(!type)return;let stTxt='';if(type==='range'){const mn=reqN('stMin','Min?');if(!mn)return;const mx=reqN('stMax','Max?');if(!mx)return;stTxt=`DE ${mn} A ${mx} STORIES`;}else if(type==='more'){const v=reqN('stSingle','Valor?');if(!v)return;stTxt=`MAIS DE ${v} STORIES`;}else{const v=reqN('stSingle','Valor?');if(!v)return;stTxt=`ATÉ ${v} STORIES`;}resultado=stTxt;r=plainSignal(`${title} — 📱 Stories ${who} — ${hour}`,[['📱 Criador',who],['🕐 Horário do Story',hour],['📊 Confiança',conf+'%'],['🕒 Gerado em',dt]],url,resultado);}
+  else if(ev.startsWith('temp-')){const city=ev==='temp-rio'?'RIO DE JANEIRO':'SÃO PAULO';const emoji=ev==='temp-rio'?'🏖️':'🏙️';const temp=reqN('tempVal','Temperatura?');if(!temp)return;const pos=req('posValue','Posição?');if(!pos)return;resultado=pos+' '+temp+'°C 🌡️';r=plainSignal(`${title} — 🌡️ Temperatura`,[[emoji+' Cidade',city],['🌡️ Alvo',temp+'°C'],['📊 Confiança',conf+'%'],['🕒 Horário',dt],['⚠️ Obs','Reinicia às 16:01 BRT']],url,resultado);}
+  if(!r)return;
+  window.rawSignalText=r.tg;
+  window.rawSignalTextBot=r.tgBot;
+  document.getElementById('previewBox').innerHTML=r.html;
+  document.getElementById('copyBtn').disabled=false;
+  const sb=document.getElementById('sendBtn');if(sb){sb.disabled=false;sb.textContent='🤖 Enviar pelo Bot';}
+  const ss=document.getElementById('sendStatus');if(ss)ss.style.display='none';
+  document.getElementById('lastEvent')&&(document.getElementById('lastEvent').textContent=label);
+  await saveToHistory({ev,label,resultado,conf,tg:r.tg,timeStr:getBRT().toLocaleString('pt-BR')});
+};
+
+window.copySignal=function(){
+  if(!window.rawSignalText)return;
+  navigator.clipboard.writeText(window.rawSignalText).then(()=>showToast('✅ Copiado! Cole direto no Telegram.')).catch(()=>fallbackCopy(window.rawSignalText));
+};
+
+// ── HELPERS ───────────────────────────────────────────────
+function updateStatsBadges(){
+  document.getElementById('histBadge').textContent=histCache.length;
+  document.getElementById('histCount').textContent=histCache.length;
+  const cnt=parseInt(localStorage.getItem('spCount_'+uid())||'0');
+  document.getElementById('totalSignals').textContent=cnt;
+}
+
+function showToast(msg,type=''){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.className='toast'+(type?' '+type:'');
+  t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800);
+}
+window.showToast=showToast;
+
+function fallbackCopy(text){
+  const ta=document.getElementById('rawText');ta.value=text;ta.focus();ta.select();document.execCommand('copy');showToast('✅ Copiado!');
+}
+
+function getBRT(){return new Date(new Date().toLocaleString('en-US',{timeZone:'America/Sao_Paulo'}));}
+function fmtDate(d){return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});}
+function fmtTime(d){return d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function req(id,msg){const el=document.getElementById(id);if(!el||!el.value.trim()){alert(msg);return null;}return el.value.trim();}
+function reqT(id,msg){const el=document.getElementById(id);if(!el||!el.value.trim()){alert(msg);return null;}return el.value.trim();}
+function reqN(id,msg){const el=document.getElementById(id);if(!el||el.value===''){alert(msg);return null;}return el.value;}
+
+const TITLES=['🚨 ALERTA MÁXIMO','🔥 SINAL FORTE','⚡ OPORTUNIDADE DETECTADA','🧨 MOVIMENTO IMINENTE','💎 ENTRADA PREMIUM','🎯 ALVO CONFIRMADO','🔔 SINAL EXCLUSIVO','💥 RUPTURA IMINENTE'];
+const EVENT_LABELS={bitcoin:'₿ Bitcoin — 5 Minutos',rodovia:'🚗 Rodovia — 5 Minutos',futebol:'⚽ Futebol',cs2:'🎮 CS2',nba:'🏀 NBA',luta:'🥊 Luta / MMA',bbb:'📺 BBB26','stories-carlinhos-13':'📱 Carlinhos 13h','stories-carlinhos-19':'📱 Carlinhos 19h','stories-virginia-13':'📱 Virginia 13h','stories-virginia-19':'📱 Virginia 19h','temp-rio':'🌡️ Temp. RJ','temp-sp':'🌡️ Temp. SP'};
+
+// ── BOT (por usuário) ─────────────────────────────────────
+async function loadBotFromFirebase(){
+  try{
+    const snap=await getDoc(uDoc('bot/config'));
+    if(snap.exists()) localStorage.setItem('sp_bot_cfg_'+uid(), JSON.stringify(snap.data()));
+  }catch(e){}
+}
+async function saveBotToFirebase(cfg){
+  try{ await setDoc(uDoc('bot/config'),cfg); }catch(e){}
+}
+window._origSaveBotConfig=window.saveBotConfig;
+window.saveBotConfig=function(){
+  const token=document.getElementById('botToken').value.trim();
+  const cfg=loadBotConfig();cfg.token=token;
+  localStorage.setItem('sp_bot_cfg_'+uid(),JSON.stringify(cfg));
+  saveBotToFirebase(cfg);
+  showToast('✅ Configurações do Bot salvas!');setBotStatus('saved');
+};
+function loadBotConfig(){
+  try{return JSON.parse(localStorage.getItem('sp_bot_cfg_'+uid())||'{"token":"","channels":[]}');}
+  catch{return{token:'',channels:[]};}
+}
+window.loadBotConfig=loadBotConfig;
+
+// ── GERENCIAR USUÁRIOS (admin) ────────────────────────────
+const COL_USERS='usuarios_cadastros';
+let usersCache=[];
+
+async function loadUsers(){
+  try{
+    const snap=await getDocs(collection(db,COL_USERS));
+    usersCache=snap.docs.map(d=>({id:d.id,...d.data()}));
+    renderUsers();
+  }catch(e){renderUsers();}
+}
+window.loadUsers=loadUsers;
+
+function renderUsers(){
+  const grid=document.getElementById('userGrid');if(!grid)return;
+  if(!usersCache.length){grid.innerHTML=`<div style="text-align:center;padding:40px;color:var(--muted);font-family:var(--font-mono);font-size:12px;">Nenhum usuário parceiro criado ainda.<br>Clique em "＋ Criar Usuário".</div>`;return;}
+  grid.innerHTML=usersCache.map((u)=>`
+    <div class="user-card">
+      <div class="user-status-dot ${u.ativo===false?'inactive':''}"></div>
+      <div class="user-avatar">${(u.nome||u.user||'?')[0].toUpperCase()}</div>
+      <div class="user-info">
+        <div class="user-name">${esc(u.nome||u.user)}</div>
+        <div class="user-login">@${esc(u.user)} • criado em ${esc(u.criadoEm||'—')}</div>
+      </div>
+      <div class="user-role-badge">🤝 Parceiro</div>
+      <div class="user-actions">
+        <button class="user-edit-btn" onclick="inspectUser('${u.user}','${esc(u.nome||u.user)}')">🔍 Inspecionar</button>
+        <button class="user-edit-btn" onclick="editUser('${u.id}')">✏️</button>
+        <button class="user-del-btn"  onclick="deleteUser('${u.id}','${esc(u.nome||u.user)}')">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+// ── INSPECIONAR USUÁRIO (admin vê dados do parceiro) ──────
+let inspectingUser=null;
+window.inspectUser=async function(userLogin, userName){
+  inspectingUser=userLogin;
+  document.getElementById('inspectModalTitle').textContent=`🔍 Inspecionando: ${userName}`;
+  document.getElementById('inspectOverlay').classList.add('show');
+  document.getElementById('inspectContent').innerHTML='<div style="text-align:center;padding:30px;color:var(--muted);font-family:var(--font-mono);">⏳ Carregando dados...</div>';
+
+  try{
+    // Histórico
+    const hSnap=await getDocs(query(uColAs(userLogin,'historico'),orderBy('ts','desc')));
+    const hist=hSnap.docs.map(d=>d.data());
+    // Templates
+    const tSnap=await getDocs(uColAs(userLogin,'templates'));
+    const tpls=tSnap.docs.map(d=>d.data());
+    // Config
+    const cfgSnap=await getDoc(uDocAs(userLogin,'config/geral'));
+    const cfg=cfgSnap.exists()?cfgSnap.data():{};
+    // Bot
+    const botSnap=await getDoc(uDocAs(userLogin,'bot/config'));
+    const bot=botSnap.exists()?botSnap.data():{};
+
+    document.getElementById('inspectContent').innerHTML=`
+      <div style="display:flex;flex-direction:column;gap:18px;">
+        <!-- Config -->
+        <div>
+          <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:10px;font-family:var(--font-mono);">⚙️ Configurações</div>
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:12px;font-family:var(--font-mono);line-height:1.8;">
+            <div>Link padrão: <span style="color:var(--text);">${esc(cfg.defaultLink||'—')}</span></div>
+            <div>Rodapé: <span style="color:var(--text);">${esc(cfg.footer||'—')}</span></div>
+            <div>Entrada AGORA: <span style="color:var(--text);">${cfg.showEntrada!==false?'✅ Sim':'❌ Não'}</span></div>
+            <div>Avisos risco: <span style="color:var(--text);">${cfg.showRisk!==false?'✅ Sim':'❌ Não'}</span></div>
+          </div>
+        </div>
+        <!-- Bot -->
+        <div>
+          <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:10px;font-family:var(--font-mono);">🤖 Bot</div>
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:12px;font-family:var(--font-mono);line-height:1.8;">
+            <div>Token: <span style="color:var(--text);">${bot.token?bot.token.slice(0,12)+'••••••••••••••••':'—'}</span></div>
+            <div>Canais: <span style="color:var(--text);">${(bot.channels||[]).map(c=>`${c.name||c.id} (${c.active!==false?'ativo':'inativo'})`).join(', ')||'—'}</span></div>
+          </div>
+        </div>
+        <!-- Templates -->
+        <div>
+          <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:10px;font-family:var(--font-mono);">📋 Templates (${tpls.length})</div>
+          ${tpls.length?tpls.map(t=>`<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:6px;font-size:12px;"><strong style="color:var(--text);">${esc(t.icon||'📋')} ${esc(t.name)}</strong></div>`).join(''):`<div style="color:var(--muted);font-size:12px;font-family:var(--font-mono);">Nenhum template personalizado.</div>`}
+        </div>
+        <!-- Histórico -->
+        <div>
+          <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:10px;font-family:var(--font-mono);">🕒 Últimos Sinais (${hist.length})</div>
+          ${hist.length?hist.slice(0,5).map(h=>`
+            <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:6px;font-size:12px;">
+              <div style="font-weight:700;color:var(--text);">${esc(h.label||'Sinal')}</div>
+              <div style="color:var(--green);margin:3px 0;">${esc(h.resultado||'—')}</div>
+              <div style="color:var(--muted);font-family:var(--font-mono);font-size:10px;">${esc(h.timeStr||'')}</div>
+            </div>`).join(''):`<div style="color:var(--muted);font-size:12px;font-family:var(--font-mono);">Nenhum sinal gerado ainda.</div>`}
+        </div>
+      </div>`;
+  }catch(e){
+    document.getElementById('inspectContent').innerHTML=`<div style="color:var(--red);font-family:var(--font-mono);font-size:12px;">❌ Erro ao carregar: ${e.message}</div>`;
+  }
+};
+
+window.openAddUser=function(){
+  document.getElementById('userModalTitle').textContent='➕ Criar Usuário Parceiro';
+  document.getElementById('uNome').value='';document.getElementById('uUser').value='';
+  document.getElementById('uPass').value='';document.getElementById('uEditId').value='';
+  document.getElementById('uUser').disabled=false;
+  document.getElementById('addUserOverlay').classList.add('show');
+};
+window.editUser=function(id){
+  const u=usersCache.find(x=>x.id===id);if(!u)return;
+  document.getElementById('userModalTitle').textContent='✏️ Editar Usuário';
+  document.getElementById('uNome').value=u.nome||'';document.getElementById('uUser').value=u.user||'';
+  document.getElementById('uPass').value='';document.getElementById('uEditId').value=id;
+  document.getElementById('uUser').disabled=true;
+  document.getElementById('addUserOverlay').classList.add('show');
+};
+window.closeUserModal=function(e){if(e.target.id==='addUserOverlay')document.getElementById('addUserOverlay').classList.remove('show');};
+window.toggleUPass=function(){const inp=document.getElementById('uPass');const btn=document.getElementById('uPassEye');inp.type=inp.type==='password'?'text':'password';btn.textContent=inp.type==='password'?'👁':'🙈';};
+
+window.saveUser=async function(){
+  const nome=document.getElementById('uNome').value.trim();
+  const user=document.getElementById('uUser').value.trim();
+  const pass=document.getElementById('uPass').value;
+  const editId=document.getElementById('uEditId').value;
+  if(!nome){showToast('⚠️ Informe o nome.','error');return;}
+  if(!user){showToast('⚠️ Informe o usuário.','error');return;}
+  if(!editId&&!pass){showToast('⚠️ Informe a senha.','error');return;}
+  if(!editId&&pass.length<6){showToast('⚠️ Senha mínima: 6 caracteres.','error');return;}
+  if(!editId&&usersCache.find(u=>u.user===user)){showToast('⚠️ Usuário já existe.','error');return;}
+  if(user==='palpita.io'){showToast('⚠️ Nome reservado.','error');return;}
+  const brt=new Date(new Date().toLocaleString('en-US',{timeZone:'America/Sao_Paulo'}));
+  const criadoEm=brt.toLocaleDateString('pt-BR');
+  try{
+    if(editId){
+      const data={nome,role:'parceiro',ativo:true};if(pass)data.pass=pass;
+      await setDoc(doc(db,COL_USERS,editId),data,{merge:true});
+      const idx=usersCache.findIndex(u=>u.id===editId);if(idx>=0)usersCache[idx]={...usersCache[idx],...data};
+      showToast('✅ Usuário atualizado!');
+    }else{
+      const ref=await addDoc(collection(db,COL_USERS),{nome,user,pass,role:'parceiro',ativo:true,criadoEm});
+      usersCache.push({id:ref.id,nome,user,pass,role:'parceiro',ativo:true,criadoEm});
+      showToast(`✅ Usuário "${nome}" criado!`);
+    }
+    document.getElementById('addUserOverlay').classList.remove('show');renderUsers();
+  }catch(e){showToast('❌ Erro: '+e.message,'error');}
+};
+
+window.deleteUser=async function(id,nome){
+  if(!confirm(`Remover "${nome}"?`))return;
+  try{
+    await deleteDoc(doc(db,COL_USERS,id));
+    usersCache=usersCache.filter(u=>u.id!==id);renderUsers();showToast(`🗑 Usuário "${nome}" removido.`);
+  }catch(e){showToast('❌ Erro: '+e.message,'error');}
+};
+
+// ── INIT ──────────────────────────────────────────────────
+(async()=>{
+  setDbStatus('loading');
+  try{
+    await loadConfig();
+    await loadBotFromFirebase();
+    await loadHistory();
+    await loadTemplates();
+    setDbStatus('online');
+    const cnt=parseInt(localStorage.getItem('spCount_'+uid())||'0');
+    document.getElementById('totalSignals').textContent=cnt;
+  }catch(e){
+    setDbStatus('offline');
+    showToast('⚠️ Sem conexão com Firebase.','error');
+  }
+})();
 
 // ── STATUS ────────────────────────────────────────────────
 function setDbStatus(state){
@@ -1229,9 +1960,10 @@ window.resetAll = async function(){
 const SEP='━━━━━━━━━━━━━━━━━━━━';
 
 function plainSignal(title, lines, url, resultado){
-  const dataLines = lines.map(([k,v])=>`__${k}:__ **${v}**`).join('\n');
-  const entradaLine = CFG.showEntrada ? '\n⚡ **Entrada válida AGORA**' : '';
-  const riskLines   = CFG.showRisk
+  // ── Texto para COPIAR (com markdown visual **negrito** __sublinhado__)
+  const dataLinesMD = lines.map(([k,v])=>`__${k}:__ **${v}**`).join('\n');
+  const entradaMD   = CFG.showEntrada ? '\n⚡ **Entrada válida AGORA**' : '';
+  const riskMD      = CFG.showRisk
     ? '\n⚠️ __Palpites envolvem risco.__\n⚠️ __Sinais gerados por análise, podem haver erros.__'
     : '';
   const footerLine  = CFG.footer ? `\n\n${CFG.footer}` : '';
@@ -1240,12 +1972,33 @@ function plainSignal(title, lines, url, resultado){
 `**${title}**
 ${SEP}
 __🎯 Resultado:__ **${resultado}**
-${dataLines}
-${SEP}${entradaLine}${riskLines}
+${dataLinesMD}
+${SEP}${entradaMD}${riskMD}
 
 👉 **LINK DO EVENTO:**
 ${url}${footerLine}`;
 
+  // ── Texto para ENVIO VIA BOT (HTML do Telegram: <b>, <i>)
+  // Escapa caracteres especiais do HTML
+  const escHTML = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const dataLinesHTML = lines.map(([k,v])=>`<u>${escHTML(k)}:</u> <b>${escHTML(v)}</b>`).join('\n');
+  const entradaHTML   = CFG.showEntrada ? '\n⚡ <b>Entrada válida AGORA</b>' : '';
+  const riskHTML      = CFG.showRisk
+    ? '\n⚠️ <i>Palpites envolvem risco.</i>\n⚠️ <i>Sinais gerados por análise, podem haver erros.</i>'
+    : '';
+  const footerHTML    = CFG.footer ? `\n\n${escHTML(CFG.footer)}` : '';
+
+  const tgBot =
+`<b>${escHTML(title)}</b>
+${SEP}
+<u>🎯 Resultado:</u> <b>${escHTML(resultado)}</b>
+${dataLinesHTML}
+${SEP}${entradaHTML}${riskHTML}
+
+👉 <b>LINK DO EVENTO:</b>
+${escHTML(url)}${footerHTML}`;
+
+  // ── HTML para pré-visualização na tela
   const rowsHtml = lines.map(([k,v])=>
     `<div style="padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05);display:flex;justify-content:space-between;align-items:center;gap:10px;">
       <span style="font-size:11px;color:var(--muted);text-decoration:underline;text-underline-offset:2px;flex-shrink:0;">${esc(k)}:</span>
@@ -1273,7 +2026,7 @@ ${CFG.showRisk ? `<div style="background:rgba(251,191,36,.06);border:1px solid r
      style="color:var(--accent);font-weight:700;word-break:break-all;text-decoration:underline;font-size:12px;">${esc(url)}</a>
 </div>`;
 
-  return {tg, html};
+  return {tg, tgBot, html};
 }
 
 window.rawSignalText = '';
@@ -1345,7 +2098,8 @@ window.generateSignal = async function(){
       ['🕒 Horário',dt],['⚠️ Obs','Reinicia às 16:01 BRT']],url,resultado);}
 
   if(!r) return;
-  window.rawSignalText = r.tg;
+  window.rawSignalText    = r.tg;    // markdown para copiar
+  window.rawSignalTextBot = r.tgBot; // HTML para envio via bot
   document.getElementById('previewBox').innerHTML = r.html;
   document.getElementById('copyBtn').disabled = false;
   const sb = document.getElementById('sendBtn'); if(sb) { sb.disabled=false; sb.textContent='🤖 Enviar pelo Bot'; }
@@ -1421,6 +2175,126 @@ const EVENT_LABELS={
     showToast('⚠️ Sem conexão com Firebase.','error');
   }
 })();
+
+// ══════════════════════════════════════════════════════════════
+// GERENCIAR USUÁRIOS
+// ══════════════════════════════════════════════════════════════
+const COL_USERS = 'usuarios';
+let usersCache = [];
+
+async function loadUsers(){
+  try {
+    const snap = await getDocs(collection(db, COL_USERS));
+    usersCache = snap.docs.map(d=>({id:d.id,...d.data()}));
+    renderUsers();
+  } catch(e){ renderUsers(); }
+}
+window.loadUsers = loadUsers;
+
+function renderUsers(){
+  const grid = document.getElementById('userGrid');
+  if(!grid) return;
+  if(!usersCache.length){
+    grid.innerHTML=`<div style="text-align:center;padding:40px;color:var(--muted);font-family:var(--font-mono);font-size:12px;">
+      Nenhum usuário parceiro criado ainda.<br>Clique em "＋ Criar Usuário" para adicionar.
+    </div>`;
+    return;
+  }
+  grid.innerHTML = usersCache.map((u,i)=>`
+    <div class="user-card">
+      <div class="user-status-dot ${u.ativo===false?'inactive':''}"></div>
+      <div class="user-avatar">${(u.nome||u.user||'?')[0].toUpperCase()}</div>
+      <div class="user-info">
+        <div class="user-name">${esc(u.nome||u.user)}</div>
+        <div class="user-login">@${esc(u.user)} • criado em ${u.criadoEm||'—'}</div>
+      </div>
+      <div class="user-role-badge">🤝 Parceiro</div>
+      <div class="user-actions">
+        <button class="user-edit-btn" onclick="editUser('${u.id}')">✏️ Editar</button>
+        <button class="user-del-btn"  onclick="deleteUser('${u.id}','${esc(u.nome||u.user)}')">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+window.openAddUser = function(){
+  document.getElementById('userModalTitle').textContent = '➕ Criar Usuário Parceiro';
+  document.getElementById('uNome').value  = '';
+  document.getElementById('uUser').value  = '';
+  document.getElementById('uPass').value  = '';
+  document.getElementById('uEditId').value= '';
+  document.getElementById('uUser').disabled = false;
+  document.getElementById('addUserOverlay').classList.add('show');
+};
+
+window.editUser = function(id){
+  const u = usersCache.find(x=>x.id===id); if(!u) return;
+  document.getElementById('userModalTitle').textContent = '✏️ Editar Usuário';
+  document.getElementById('uNome').value   = u.nome||'';
+  document.getElementById('uUser').value   = u.user||'';
+  document.getElementById('uPass').value   = '';
+  document.getElementById('uEditId').value = id;
+  document.getElementById('uUser').disabled = true; // não permite mudar o login
+  document.getElementById('addUserOverlay').classList.add('show');
+};
+
+window.closeUserModal = function(e){
+  if(e.target.id==='addUserOverlay') document.getElementById('addUserOverlay').classList.remove('show');
+};
+
+window.toggleUPass = function(){
+  const inp=document.getElementById('uPass');
+  const btn=document.getElementById('uPassEye');
+  inp.type=inp.type==='password'?'text':'password';
+  btn.textContent=inp.type==='password'?'👁':'🙈';
+};
+
+window.saveUser = async function(){
+  const nome  = document.getElementById('uNome').value.trim();
+  const user  = document.getElementById('uUser').value.trim();
+  const pass  = document.getElementById('uPass').value;
+  const editId= document.getElementById('uEditId').value;
+
+  if(!nome){ showToast('⚠️ Informe o nome.','error'); return; }
+  if(!user){ showToast('⚠️ Informe o usuário.','error'); return; }
+  if(!editId && !pass){ showToast('⚠️ Informe a senha.','error'); return; }
+  if(!editId && pass.length < 6){ showToast('⚠️ Senha mínima: 6 caracteres.','error'); return; }
+
+  // Verifica duplicata
+  if(!editId && usersCache.find(u=>u.user===user)){
+    showToast('⚠️ Este usuário já existe.','error'); return;
+  }
+  if(user === 'palpita.io'){ showToast('⚠️ Nome reservado.','error'); return; }
+
+  const brt = new Date(new Date().toLocaleString('en-US',{timeZone:'America/Sao_Paulo'}));
+  const criadoEm = brt.toLocaleDateString('pt-BR');
+
+  try {
+    if(editId){
+      const data = {nome, role:'parceiro', ativo:true};
+      if(pass) data.pass = pass;
+      await setDoc(doc(db, COL_USERS, editId), data, {merge:true});
+      const idx = usersCache.findIndex(u=>u.id===editId);
+      if(idx>=0) usersCache[idx] = {...usersCache[idx],...data};
+      showToast('✅ Usuário atualizado!');
+    } else {
+      const ref = await addDoc(collection(db, COL_USERS),{nome,user,pass,role:'parceiro',ativo:true,criadoEm});
+      usersCache.push({id:ref.id,nome,user,pass,role:'parceiro',ativo:true,criadoEm});
+      showToast(`✅ Usuário "${nome}" criado com sucesso!`);
+    }
+    document.getElementById('addUserOverlay').classList.remove('show');
+    renderUsers();
+  } catch(e){ showToast('❌ Erro: '+e.message,'error'); }
+};
+
+window.deleteUser = async function(id, nome){
+  if(!confirm(`Remover o usuário "${nome}"? Ele perderá acesso imediatamente.`)) return;
+  try {
+    await deleteDoc(doc(db, COL_USERS, id));
+    usersCache = usersCache.filter(u=>u.id!==id);
+    renderUsers();
+    showToast(`🗑 Usuário "${nome}" removido.`);
+  } catch(e){ showToast('❌ Erro: '+e.message,'error'); }
+};
 
 </script>
 
@@ -1606,7 +2480,7 @@ window.toggleBotToken = function(){
 
 // ── ENVIAR SINAL PELO BOT ────────────────────────────────
 window.sendToTelegram = async function(){
-  const text = window.rawSignalText;
+  const text = window.rawSignalTextBot || window.rawSignalText;
   if(!text){ showToast && showToast('⚠️ Gere um sinal primeiro.','error'); return; }
 
   const cfg      = loadBotConfig();
@@ -1673,7 +2547,7 @@ window.sendToTelegram = async function(){
 // Função de envio (com fallback CORS)
 async function sendMessage(token, chatId, text){
   const url  = `https://api.telegram.org/bot${token}/sendMessage`;
-  const body = JSON.stringify({ chat_id: chatId, text: text });
+  const body = JSON.stringify({ chat_id: chatId, text: text, parse_mode: 'HTML' });
   const opts = { method:'POST', headers:{'Content-Type':'application/json'}, body };
 
   // Tentativa direta
@@ -1699,6 +2573,7 @@ function switchTab(id, btn){
   if(id==='historico') window.renderHistory && window.renderHistory();
   if(id==='templates') window.renderTemplates && window.renderTemplates();
   if(id==='bot') applyBotConfigToUI && applyBotConfigToUI();
+  if(id==='usuarios') window.loadUsers && window.loadUsers();
 }
 
 // ── LINK ────────────────────────────────────────────────
