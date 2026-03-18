@@ -53,7 +53,9 @@ header{display:flex;align-items:center;justify-content:space-between;padding:24p
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
 .header-badge{background:linear-gradient(135deg,rgba(245,200,66,.15),rgba(245,200,66,.05));border:1px solid rgba(245,200,66,.3);color:var(--gold);padding:6px 14px;border-radius:100px;font-size:10px;font-family:var(--font-mono);letter-spacing:1px;text-transform:uppercase;font-weight:700;}
 .user-pill{display:none;align-items:center;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:100px;padding:5px 14px;font-size:11px;font-family:var(--font-mono);}
+.user-pill.visible{display:flex;}
 .btn-logout{display:none;background:rgba(255,61,90,.1);border:1px solid rgba(255,61,90,.3);color:var(--red);padding:6px 14px;border-radius:100px;font-size:11px;font-family:var(--font-mono);font-weight:700;cursor:pointer;transition:all .2s;}
+.btn-logout.visible{display:inline-flex;align-items:center;gap:6px;}
 .btn-logout:hover{background:rgba(255,61,90,.2);}
 
 /* TABS */
@@ -263,7 +265,7 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
     <div class="db-status"><div class="db-dot loading" id="dbDot"></div><span id="dbLabel">Conectando...</span></div>
     <div class="user-pill" id="userPill"><span id="userPillName" style="color:var(--text);font-weight:700;"></span><span id="userPillRole" style="color:var(--accent);font-size:10px;margin-left:4px;"></span></div>
     <div class="header-badge">🔐 VIP v4.0</div>
-    <button class="btn-logout" id="logoutBtn" onclick="doLogout()">⏻ Sair</button>
+    <button class="btn-logout" id="logoutBtn">⏻ Sair</button>
   </div>
 </header>
 
@@ -592,10 +594,10 @@ function applySession(matched){
   sessionStorage.setItem(SESSION_USER,matched.user);
   sessionStorage.setItem(SESSION_ROLE,matched.role);
   // Update header
-  document.getElementById('userPill').style.display='flex';
+  document.getElementById('userPill').classList.add('visible');
   document.getElementById('userPillName').textContent=matched.user;
   document.getElementById('userPillRole').textContent=matched.role==='admin'?'👑 Admin':'🤝 Parceiro';
-  document.getElementById('logoutBtn').style.display='';
+  document.getElementById('logoutBtn').classList.add('visible');
   // Show/hide admin tabs
   document.querySelectorAll('.admin-only').forEach(el=>el.style.display=matched.role==='admin'?'':'none');
   // Fade out login screen
@@ -605,6 +607,7 @@ function applySession(matched){
 }
 
 function doLogout(){
+  console.log("doLogout called");
   if(!confirm('Deseja sair?'))return;
   sessionStorage.removeItem(SESSION_USER);
   sessionStorage.removeItem(SESSION_ROLE);
@@ -617,10 +620,10 @@ function doLogout(){
   if(u&&r){
     CUR_USER=u; CUR_ROLE=r;
     document.getElementById('loginScreen').style.display='none';
-    document.getElementById('userPill').style.display='flex';
+    document.getElementById('userPill').classList.add('visible');
     document.getElementById('userPillName').textContent=u;
     document.getElementById('userPillRole').textContent=r==='admin'?'👑 Admin':'🤝 Parceiro';
-    document.getElementById('logoutBtn').style.display='';
+    document.getElementById('logoutBtn').classList.add('visible');
     document.querySelectorAll('.admin-only').forEach(el=>el.style.display=r==='admin'?'':'none');
     // init after Firebase ready
     if(window._fbReady) window._fbReady.then(()=>initUserData());
@@ -880,6 +883,19 @@ const u=sessionStorage.getItem('sp_u');
 if(u && window.initUserData) setTimeout(()=>window.initUserData(), 100);
 
 window.dispatchEvent(new Event('fbReady'));
+
+// Logout button — addEventListener garante que funciona mesmo com z-index issues
+document.addEventListener('DOMContentLoaded', function(){
+  var btn = document.getElementById('logoutBtn');
+  if(btn){
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      if(!confirm('Deseja sair?')) return;
+      sessionStorage.clear();
+      window.location.href = window.location.href;
+    });
+  }
+});
 </script>
 </body>
 </html>
