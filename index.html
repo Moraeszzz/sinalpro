@@ -151,6 +151,21 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
 .btn-copy{background:rgba(0,230,118,.1);border:1px solid var(--green);color:var(--green);}
 .btn-copy:hover{background:rgba(0,230,118,.2);}
 .btn-copy:disabled{opacity:.3;cursor:not-allowed;pointer-events:none;}
+.btn-send{background:linear-gradient(135deg,rgba(0,230,118,.15),rgba(0,212,255,.1));
+  border:1px solid var(--green);color:var(--green);font-size:14px;font-weight:800;}
+.btn-send:hover{background:linear-gradient(135deg,rgba(0,230,118,.25),rgba(0,212,255,.15));
+  box-shadow:0 0 20px rgba(0,230,118,.2);}
+.btn-send:disabled{opacity:.3;cursor:not-allowed;pointer-events:none;}
+.btn-send.sending{opacity:.7;cursor:wait;}
+.channel-item{display:flex;align-items:center;gap:10px;background:var(--bg);
+  border:1px solid var(--border);border-radius:10px;padding:12px 16px;}
+.channel-item-info{flex:1;}
+.channel-item-name{font-size:13px;font-weight:700;color:var(--text);}
+.channel-item-id{font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-top:2px;}
+.channel-item-del{background:none;border:none;color:var(--muted);cursor:pointer;
+  font-size:16px;padding:4px;transition:color .2s;line-height:1;}
+.channel-item-del:hover{color:var(--red);}
+.channel-check{width:18px;height:18px;cursor:pointer;accent-color:var(--accent);flex-shrink:0;}
 .btn-secondary{background:var(--bg);border:1px solid var(--border);color:var(--muted);font-size:12px;padding:10px 16px;width:auto;}
 .btn-secondary:hover{border-color:var(--accent);color:var(--text);}
 .btn-danger{background:rgba(255,61,90,.08);border:1px solid rgba(255,61,90,.3);color:var(--red);font-size:12px;padding:10px 16px;width:auto;}
@@ -498,6 +513,7 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
   <button class="tab-btn active" onclick="switchTab('gerador',this)">⚡ <span class="tab-label">Gerador</span></button>
   <button class="tab-btn" onclick="switchTab('historico',this)">🕒 <span class="tab-label">Histórico</span> <span class="tab-badge" id="histBadge">0</span></button>
   <button class="tab-btn" onclick="switchTab('templates',this)">📋 <span class="tab-label">Templates</span> <span class="tab-badge" id="tplBadge">0</span></button>
+  <button class="tab-btn" onclick="switchTab('bot',this)">🤖 <span class="tab-label">Bot</span></button>
   <button class="tab-btn" onclick="switchTab('config',this)">⚙️ <span class="tab-label">Config</span></button>
 </nav>
 
@@ -583,6 +599,11 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
         <button class="btn btn-copy" id="copyBtn" onclick="copySignal()" disabled>
           📋 Copiar para o Telegram
         </button>
+        <button class="btn btn-send" id="sendBtn" onclick="sendToTelegram()" disabled>
+          🤖 Enviar pelo Bot
+        </button>
+        <div id="sendStatus" style="display:none;font-size:11px;font-family:var(--font-mono);
+          text-align:center;padding:8px 12px;border-radius:8px;margin-top:-6px;"></div>
       </div>
     </div>
   </div>
@@ -626,6 +647,105 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
     <button class="btn btn-secondary" style="width:auto;" onclick="openAddTemplate()">＋ Criar Template</button>
   </div>
   <div class="tpl-grid" id="tplGrid"></div>
+</div>
+
+<!-- ══ BOT ══ -->
+<div class="page" id="page-bot">
+  <div style="margin:4px 0 24px;">
+    <h2 style="font-size:18px;font-weight:800;">🤖 Configuração do Bot</h2>
+    <p style="font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-top:4px;">Configure o Bot do Telegram para envio automático</p>
+  </div>
+
+  <!-- STATUS DO BOT -->
+  <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+    <div style="flex:1;">
+      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">Status do Bot</div>
+      <div style="font-size:11px;font-family:var(--font-mono);color:var(--muted);" id="botStatusDesc">Bot não configurado.</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div class="db-dot" id="botDot" style="background:var(--muted);"></div>
+      <span style="font-size:11px;font-family:var(--font-mono);color:var(--muted);" id="botStatusLabel">Não configurado</span>
+    </div>
+    <button class="btn btn-secondary" style="width:auto;" onclick="testBot()">🔍 Testar conexão</button>
+  </div>
+
+  <!-- CREDENCIAIS -->
+  <div class="config-section">
+    <div class="config-section-title">🔑 Credenciais</div>
+
+    <div class="config-row" style="flex-direction:column;align-items:flex-start;gap:10px;">
+      <div class="config-row-info">
+        <div class="config-row-label">BOT TOKEN</div>
+        <div class="config-row-desc">Token gerado pelo @BotFather no Telegram</div>
+      </div>
+      <div style="position:relative;width:100%;">
+        <input class="cfg-input" type="password" id="botToken"
+          placeholder="Ex: 7312345678:AAFxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          style="padding-right:44px;font-family:var(--font-mono);font-size:12px;">
+        <button onclick="toggleBotToken()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);
+          background:none;border:none;color:var(--muted);cursor:pointer;font-size:15px;">👁</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CANAIS -->
+  <div class="config-section">
+    <div class="config-section-title">📢 Canais de Destino</div>
+    <p style="font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-bottom:16px;line-height:1.6;">
+      Adicione os canais onde o bot vai enviar os sinais.<br>
+      Use o <strong style="color:var(--text);">@username</strong> do canal (ex: @meucanal) ou o <strong style="color:var(--text);">Chat ID</strong> numérico (ex: -1001234567890).
+    </p>
+
+    <!-- Lista de canais -->
+    <div id="channelList" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;"></div>
+
+    <!-- Adicionar canal -->
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <input class="cfg-input" id="newChannelId" placeholder="@meucanal ou -1001234567890"
+        style="flex:1;min-width:200px;font-family:var(--font-mono);font-size:13px;"
+        onkeydown="if(event.key==='Enter')addChannel()">
+      <input class="cfg-input" id="newChannelName" placeholder="Nome (ex: Canal VIP)"
+        style="width:180px;"
+        onkeydown="if(event.key==='Enter')addChannel()">
+      <button class="btn btn-secondary" style="width:auto;" onclick="addChannel()">＋ Adicionar</button>
+    </div>
+  </div>
+
+  <!-- COMO OBTER O CHAT ID -->
+  <div class="config-section">
+    <div class="config-section-title">❓ Como descobrir o Chat ID</div>
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:18px;line-height:1.8;">
+      <div style="font-size:12px;color:var(--text);font-family:var(--font-mono);">
+        <div style="color:var(--accent);font-weight:700;margin-bottom:10px;">Opção 1 — Usar @username (mais fácil)</div>
+        <div style="color:var(--muted);">Se o canal for público, use diretamente o <span style="color:var(--text);">@username</span></div>
+        <div style="color:var(--muted);">Ex: seu canal é t.me/palpitaio → use <span style="color:var(--green);">@palpitaio</span></div>
+        <br>
+        <div style="color:var(--gold);font-weight:700;margin-bottom:10px;">Opção 2 — Chat ID numérico (canais privados)</div>
+        <div style="color:var(--muted);">1. Encaminhe qualquer mensagem do canal para <span style="color:var(--text);">@userinfobot</span></div>
+        <div style="color:var(--muted);">2. Ele responde com o <span style="color:var(--text);">Forwarded from chat</span> e o ID</div>
+        <div style="color:var(--muted);">3. O ID começa com <span style="color:var(--text);">-100</span> para canais</div>
+        <br>
+        <div style="color:var(--accent3);font-weight:700;margin-bottom:10px;">⚠️ Lembre-se</div>
+        <div style="color:var(--muted);">O bot precisa ser <span style="color:var(--gold);">Administrador</span> do canal para enviar mensagens.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COMO CRIAR UM BOT -->
+  <div class="config-section">
+    <div class="config-section-title">🤖 Não tem um Bot ainda?</div>
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:18px;line-height:1.9;">
+      <div style="font-size:12px;color:var(--muted);font-family:var(--font-mono);">
+        <span style="color:var(--text);">1.</span> Abra o Telegram e busque <span style="color:var(--accent);">@BotFather</span><br>
+        <span style="color:var(--text);">2.</span> Envie <span style="color:var(--green);">/newbot</span><br>
+        <span style="color:var(--text);">3.</span> Escolha um nome e um @username para o bot<br>
+        <span style="color:var(--text);">4.</span> O BotFather envia o <span style="color:var(--gold);">TOKEN</span> — copie e cole acima<br>
+        <span style="color:var(--text);">5.</span> Adicione o bot como <span style="color:var(--gold);">Administrador</span> no seu canal
+      </div>
+    </div>
+  </div>
+
+  <button class="config-save-btn" onclick="saveBotConfig()">💾 Salvar Configurações do Bot</button>
 </div>
 
 <!-- ══ CONFIG ══ -->
@@ -1228,6 +1348,8 @@ window.generateSignal = async function(){
   window.rawSignalText = r.tg;
   document.getElementById('previewBox').innerHTML = r.html;
   document.getElementById('copyBtn').disabled = false;
+  const sb = document.getElementById('sendBtn'); if(sb) { sb.disabled=false; sb.textContent='🤖 Enviar pelo Bot'; }
+  const ss = document.getElementById('sendStatus'); if(ss) ss.style.display='none';
   document.getElementById('lastEvent') && (document.getElementById('lastEvent').textContent=label);
 
   // Salva no Firebase
@@ -1348,6 +1470,226 @@ function updateClock(){
 }
 setInterval(updateClock,1000); updateClock();
 
+// ══════════════════════════════════════════════════════════════
+// BOT TELEGRAM
+// ══════════════════════════════════════════════════════════════
+const BOT_STORAGE_KEY = 'sp_bot_cfg';
+
+// Carrega config do bot do localStorage
+function loadBotConfig(){
+  try{ return JSON.parse(localStorage.getItem(BOT_STORAGE_KEY)||'{"token":"","channels":[]}'); }
+  catch{ return {token:'',channels:[]}; }
+}
+function saveBotConfig(){
+  const token = document.getElementById('botToken').value.trim();
+  const cfg   = loadBotConfig();
+  cfg.token   = token;
+  localStorage.setItem(BOT_STORAGE_KEY, JSON.stringify(cfg));
+  showToast && showToast('✅ Configurações do Bot salvas!');
+  setBotStatus('saved');
+}
+window.saveBotConfig = saveBotConfig;
+
+function applyBotConfigToUI(){
+  const cfg = loadBotConfig();
+  document.getElementById('botToken').value = cfg.token||'';
+  renderChannelList();
+  if(cfg.token) setBotStatus('configured');
+  else setBotStatus('none');
+}
+
+function setBotStatus(state){
+  const dot   = document.getElementById('botDot');
+  const label = document.getElementById('botStatusLabel');
+  const desc  = document.getElementById('botStatusDesc');
+  if(!dot) return;
+  const map = {
+    none:       ['var(--muted)',  'Não configurado', 'Insira o BOT TOKEN para ativar o envio automático.'],
+    configured: ['var(--gold)',   'Configurado',     'Token salvo. Clique em "Testar conexão" para verificar.'],
+    ok:         ['var(--green)',  '🟢 Online',        'Bot conectado e pronto para enviar sinais!'],
+    error:      ['var(--red)',    '🔴 Erro',          'Token inválido ou bot sem permissão no canal.'],
+    saved:      ['var(--accent)', 'Salvo',            'Configurações salvas. Clique em "Testar conexão".'],
+  };
+  const [color, lbl, d] = map[state]||map.none;
+  dot.style.background = color;
+  dot.className = 'db-dot' + (state==='ok'?' online':'');
+  label.textContent = lbl;
+  if(desc) desc.textContent = d;
+}
+
+// Testar o bot
+window.testBot = async function(){
+  const token = document.getElementById('botToken').value.trim();
+  if(!token){ showToast && showToast('⚠️ Insira o BOT TOKEN primeiro.','error'); return; }
+  const btn = document.querySelector('[onclick="testBot()"]');
+  if(btn){ btn.textContent='⏳ Testando...'; btn.disabled=true; }
+  try{
+    const res  = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+    const data = await res.json();
+    if(data.ok){
+      setBotStatus('ok');
+      showToast && showToast(`✅ Bot @${data.result.username} conectado!`);
+    } else {
+      setBotStatus('error');
+      showToast && showToast('❌ Token inválido.','error');
+    }
+  } catch(e){
+    // CORS bloqueou — usa proxy
+    try {
+      const res  = await fetch(`https://corsproxy.io/?https://api.telegram.org/bot${token}/getMe`);
+      const data = await res.json();
+      if(data.ok){ setBotStatus('ok'); showToast && showToast(`✅ Bot @${data.result.username} conectado!`); }
+      else        { setBotStatus('error'); showToast && showToast('❌ Token inválido.','error'); }
+    } catch(e2){
+      setBotStatus('error');
+      showToast && showToast('❌ Erro de conexão. Verifique o token.','error');
+    }
+  }
+  if(btn){ btn.textContent='🔍 Testar conexão'; btn.disabled=false; }
+};
+
+// Canais
+function renderChannelList(){
+  const cfg  = loadBotConfig();
+  const list = document.getElementById('channelList');
+  if(!list) return;
+  if(!cfg.channels||!cfg.channels.length){
+    list.innerHTML=`<div style="color:var(--muted);font-size:12px;font-family:var(--font-mono);padding:10px 0;">Nenhum canal adicionado. Adicione abaixo.</div>`;
+    return;
+  }
+  list.innerHTML = cfg.channels.map((ch,i)=>`
+    <div class="channel-item">
+      <input type="checkbox" class="channel-check" ${ch.active!==false?'checked':''} onchange="toggleChannel(${i},this.checked)">
+      <div class="channel-item-info">
+        <div class="channel-item-name">${esc2(ch.name||ch.id)}</div>
+        <div class="channel-item-id">${esc2(ch.id)}</div>
+      </div>
+      <button class="channel-item-del" onclick="removeChannel(${i})" title="Remover">✕</button>
+    </div>`).join('');
+}
+
+window.addChannel = function(){
+  const idEl   = document.getElementById('newChannelId');
+  const nameEl = document.getElementById('newChannelName');
+  const id     = idEl.value.trim();
+  const name   = nameEl.value.trim() || id;
+  if(!id){ showToast && showToast('⚠️ Informe o @username ou Chat ID.','error'); return; }
+  const cfg = loadBotConfig();
+  if(!cfg.channels) cfg.channels=[];
+  if(cfg.channels.find(c=>c.id===id)){ showToast && showToast('Canal já adicionado.','error'); return; }
+  cfg.channels.push({id, name, active:true});
+  localStorage.setItem(BOT_STORAGE_KEY, JSON.stringify(cfg));
+  idEl.value=''; nameEl.value='';
+  renderChannelList();
+  showToast && showToast(`✅ Canal "${name}" adicionado!`);
+};
+
+window.removeChannel = function(i){
+  const cfg = loadBotConfig();
+  const ch  = cfg.channels[i];
+  if(!confirm(`Remover canal "${ch.name||ch.id}"?`)) return;
+  cfg.channels.splice(i,1);
+  localStorage.setItem(BOT_STORAGE_KEY, JSON.stringify(cfg));
+  renderChannelList();
+};
+
+window.toggleChannel = function(i, active){
+  const cfg = loadBotConfig();
+  cfg.channels[i].active = active;
+  localStorage.setItem(BOT_STORAGE_KEY, JSON.stringify(cfg));
+};
+
+window.toggleBotToken = function(){
+  const inp = document.getElementById('botToken');
+  inp.type = inp.type==='password' ? 'text' : 'password';
+};
+
+// ── ENVIAR SINAL PELO BOT ────────────────────────────────
+window.sendToTelegram = async function(){
+  const text = window.rawSignalText;
+  if(!text){ showToast && showToast('⚠️ Gere um sinal primeiro.','error'); return; }
+
+  const cfg      = loadBotConfig();
+  const token    = cfg.token;
+  const channels = (cfg.channels||[]).filter(c=>c.active!==false);
+
+  if(!token){
+    showToast && showToast('⚠️ Configure o BOT TOKEN na aba 🤖 Bot.','error'); return;
+  }
+  if(!channels.length){
+    showToast && showToast('⚠️ Adicione pelo menos um canal na aba 🤖 Bot.','error'); return;
+  }
+
+  const btn    = document.getElementById('sendBtn');
+  const status = document.getElementById('sendStatus');
+  btn.disabled = true;
+  btn.classList.add('sending');
+  btn.textContent = '⏳ Enviando...';
+  status.style.display = 'block';
+  status.style.background = 'rgba(0,212,255,.06)';
+  status.style.border = '1px solid rgba(0,212,255,.2)';
+  status.style.color = 'var(--accent)';
+  status.textContent = `Enviando para ${channels.length} canal(is)...`;
+
+  let ok=0, fail=0, errors=[];
+
+  for(const ch of channels){
+    try {
+      const result = await sendMessage(token, ch.id, text);
+      if(result.ok){ ok++; }
+      else { fail++; errors.push(`${ch.name}: ${result.description||'Erro desconhecido'}`); }
+    } catch(e) {
+      fail++;
+      errors.push(`${ch.name}: Erro de rede`);
+    }
+  }
+
+  btn.disabled = false;
+  btn.classList.remove('sending');
+  btn.textContent = '🤖 Enviar pelo Bot';
+
+  if(ok>0 && fail===0){
+    status.style.background = 'rgba(0,230,118,.08)';
+    status.style.border      = '1px solid rgba(0,230,118,.25)';
+    status.style.color       = 'var(--green)';
+    status.textContent       = `✅ Enviado com sucesso para ${ok} canal(is)!`;
+    showToast && showToast(`✅ Sinal enviado para ${ok} canal(is)!`);
+  } else if(ok>0 && fail>0){
+    status.style.background = 'rgba(245,200,66,.06)';
+    status.style.border      = '1px solid rgba(245,200,66,.2)';
+    status.style.color       = 'var(--gold)';
+    status.textContent       = `⚠️ ${ok} enviado(s), ${fail} falhou: ${errors.join(' | ')}`;
+  } else {
+    status.style.background = 'rgba(255,61,90,.08)';
+    status.style.border      = '1px solid rgba(255,61,90,.2)';
+    status.style.color       = 'var(--red)';
+    status.textContent       = `❌ Falha: ${errors.join(' | ')}`;
+    showToast && showToast('❌ Erro ao enviar. Verifique o token e se o bot é admin do canal.','error');
+  }
+
+  setTimeout(()=>{ status.style.display='none'; }, 8000);
+};
+
+// Função de envio (com fallback CORS)
+async function sendMessage(token, chatId, text){
+  const url  = `https://api.telegram.org/bot${token}/sendMessage`;
+  const body = JSON.stringify({ chat_id: chatId, text: text, parse_mode: 'Markdown' });
+  const opts = { method:'POST', headers:{'Content-Type':'application/json'}, body };
+
+  // Tentativa direta
+  try {
+    const res = await fetch(url, opts);
+    return await res.json();
+  } catch(e) {
+    // Fallback com proxy CORS
+    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+    const res = await fetch(proxyUrl, opts);
+    return await res.json();
+  }
+}
+
+function esc2(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
 // ── TABS ────────────────────────────────────────────────
 function switchTab(id, btn){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
@@ -1356,6 +1698,7 @@ function switchTab(id, btn){
   if(btn) btn.classList.add('active');
   if(id==='historico') window.renderHistory && window.renderHistory();
   if(id==='templates') window.renderTemplates && window.renderTemplates();
+  if(id==='bot') applyBotConfigToUI && applyBotConfigToUI();
 }
 
 // ── LINK ────────────────────────────────────────────────
