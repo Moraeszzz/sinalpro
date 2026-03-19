@@ -1276,8 +1276,7 @@ async function monFetch(){
       } else {
         // HTML — extrai dados do texto
         const html=await r.text();
-        monLog(`📄 HTML (${html.length} chars): ${html.slice(0,150).replace(/
-/g,' ')}`,'var(--muted)');
+        monLog(`📄 HTML (${html.length} chars): ${html.slice(0,150)}`,'var(--muted)');
         data=monParseHTML(html);
         if(!data){ monLog(`⚠️ HTML sem dados extraídos`,'var(--gold)'); continue; }
       }
