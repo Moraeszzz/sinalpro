@@ -486,10 +486,22 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
     <!-- CONFIG -->
     <div class="card">
       <div class="card-title">⚙ Configuração</div>
+      <!-- URL detectada -->
       <div style="background:rgba(0,230,118,.06);border:1px solid rgba(0,230,118,.2);border-radius:10px;padding:12px 14px;margin-bottom:14px;">
-        <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:6px;">✅ URL detectada automaticamente</div>
+        <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:6px;">📡 Evento Monitorado</div>
         <div id="monUrlDisplay" style="font-size:11px;font-family:var(--font-mono);color:var(--muted);word-break:break-all;">Aguardando detecção...</div>
-        <div style="font-size:10px;color:var(--muted);font-family:var(--font-mono);margin-top:6px;">Busca o evento ativo na home a cada 30s — atualiza sozinho a cada novo ciclo</div>
+      </div>
+      <!-- ID Manual -->
+      <div class="field">
+        <label>ID do Evento <span style="color:var(--muted);font-size:9px;">(opcional — preencha se não detectar)</span></label>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="monManualId" placeholder="Ex: 14738" style="font-family:var(--font-mono);flex:1;"
+            oninput="document.getElementById('monManualId').value=this.value.replace(/[^0-9]/g,'')">
+          <button class="btn btn-secondary" style="width:auto;padding:10px 16px;" onclick="monApplyManualId()">Usar</button>
+        </div>
+        <div style="font-size:10px;color:var(--muted);font-family:var(--font-mono);margin-top:6px;">
+          Veja o ID na URL: app.palpita.io/live/<strong style="color:var(--accent);">14738</strong>-market/rodovia...
+        </div>
       </div>
       <div class="field">
         <label>Disparar sinal quando faltar (segundos)</label>
@@ -1042,417 +1054,542 @@ document.addEventListener('DOMContentLoaded', function(){
 
 <!-- MONITOR SCRIPT -->
 <script>
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // MONITOR AUTOMÁTICO — RODOVIA PALPITA.IO
-// Estratégia: fetch com credentials (cookies do browser)
-// a cada 3s na API do palpita.io — sem CORS porque o
-// browser já está autenticado no site.
-// ═══════════════════════════════════════════════════════
+//
+// ESTRATÉGIA DEFINITIVA:
+// 1. Abre a página do palpita.io num iframe oculto (mesmo domínio
+//    → sem CORS, com cookies automáticos)
+// 2. Lê o DOM do iframe para extrair os dados em tempo real
+// 3. Detecta o ID do evento atual pesquisando o slug no HTML
+// 4. Atualiza a cada 3 segundos
+//
+// Não precisa de API externa, proxy ou Pusher.
+// Funciona porque o browser já está autenticado.
+// ═══════════════════════════════════════════════════════════════
 
 const MON = {
+  iframe: null,
   timer: null,
   tickTimer: null,
   readings: [],
   thresholdMais: null,
-  thresholdAte: null,
-  betClosesSec: null,
-  resultSec: null,
-  signalFired: false,
-  signalMD: '',
-  signalBot: '',
-  running: false,
-  eventSlug: '',
-  eventId: '',
-  currentUrl: '',
-  lastDataTs: 0,
+  thresholdAte:  null,
+  betClosesSec:  null,
+  resultSec:     null,
+  signalFired:   false,
+  signalMD:      '',
+  signalBot:     '',
+  running:       false,
+  eventSlug:     '',
+  eventId:       '',
+  currentUrl:    '',
+  iframeReady:   false,
+  readErrors:    0,
 };
 
-// ── LOG ───────────────────────────────────────────────
+// ── LOG ──────────────────────────────────────────────────────────
 function monLog(msg, color='var(--muted)'){
-  const el=document.getElementById('monLog'); if(!el) return;
+  const el=document.getElementById('monLog');if(!el)return;
   const t=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:'America/Sao_Paulo'});
-  const d=document.createElement('div'); d.style.color=color; d.textContent=`[${t}] ${msg}`;
+  const d=document.createElement('div');d.style.color=color;d.textContent=`[${t}] ${msg}`;
   el.insertBefore(d,el.firstChild);
-  while(el.children.length>200) el.removeChild(el.lastChild);
+  while(el.children.length>300)el.removeChild(el.lastChild);
 }
-
 function monSetStatus(icon,text,sub,color='var(--muted)'){
   const g=id=>document.getElementById(id);
-  if(g('monStatusIcon')) g('monStatusIcon').textContent=icon;
-  if(g('monStatusText')){ g('monStatusText').textContent=text; g('monStatusText').style.color=color; }
-  if(g('monStatusSub'))  g('monStatusSub').textContent=sub;
+  if(g('monStatusIcon'))g('monStatusIcon').textContent=icon;
+  if(g('monStatusText')){g('monStatusText').textContent=text;g('monStatusText').style.color=color;}
+  if(g('monStatusSub'))g('monStatusSub').textContent=sub;
+}
+function monSetUrl(slug,id){
+  MON.eventSlug=slug;MON.eventId=id;
+  MON.currentUrl=`https://app.palpita.io/live/${id}-market/${slug}`;
+  const d=document.getElementById('monUrlDisplay');
+  if(d){d.textContent=MON.currentUrl;d.style.color='var(--green)';}
 }
 
-// ── INICIAR ───────────────────────────────────────────
+// ── INICIAR ──────────────────────────────────────────────────────
 function monitorStart(){
   const brt=new Date(new Date().toLocaleString('en-US',{timeZone:'America/Sao_Paulo'}));
   const hm=brt.getHours()*60+brt.getMinutes();
   if(hm<9*60||hm>23*60+30){
     showToast('⚠️ Fora do horário (09:00–23:30 BRT)','error');
-    monLog('⚠️ Fora do horário de operação','var(--red)'); return;
+    monLog('⚠️ Fora do horário de operação','var(--red)');return;
   }
   monStop(false);
-  MON.running=true; MON.readings=[]; MON.signalFired=false;
-  MON.thresholdMais=null; MON.thresholdAte=null;
-  MON.betClosesSec=null; MON.resultSec=null;
-  MON.eventSlug=''; MON.eventId=''; MON.currentUrl='';
+  MON.running=true;MON.readings=[];MON.signalFired=false;
+  MON.thresholdMais=null;MON.thresholdAte=null;
+  MON.betClosesSec=null;MON.resultSec=null;
+  MON.eventSlug='';MON.eventId='';MON.currentUrl='';
+  MON.iframeReady=false;MON.readErrors=0;
 
   document.getElementById('monStartBtn').style.display='none';
   document.getElementById('monStopBtn').style.display='';
   document.getElementById('monLiveTag').style.display='';
   document.getElementById('monitorBadge').style.display='';
   document.getElementById('monSignalCard').style.display='none';
+  document.getElementById('monThresholds').style.display='none';
   const disp=document.getElementById('monUrlDisplay');
-  if(disp){ disp.textContent='Detectando...'; disp.style.color='var(--muted)'; }
-  monSetStatus('🔍','Buscando evento...','Localizando rodovia ativa...','var(--gold)');
-  monLog('🔍 Buscando evento de Rodovia...','var(--accent)');
+  if(disp){disp.textContent='Detectando...';disp.style.color='var(--muted)';}
+  monSetStatus('🔍','Buscando evento...','Carregando palpita.io...','var(--gold)');
+  monLog('🔍 Iniciando — carregando home do palpita.io...','var(--accent)');
 
-  // Roda imediatamente e depois a cada 3s
-  monCycle();
-  MON.timer = setInterval(monCycle, 3000);
-  MON.tickTimer = setInterval(monTick, 1000);
+  // PASSO 1: Carrega a home para descobrir o slug atual
+  monLoadHome();
 }
 
-// ── CICLO PRINCIPAL ───────────────────────────────────
-async function monCycle(){
-  if(!MON.running) return;
+// ── PASSO 1: CARREGAR HOME E DESCOBRIR SLUG ──────────────────────
+function monLoadHome(){
+  // Cria iframe oculto apontando para a home
+  let iframe = document.getElementById('monIframeHome');
+  if(iframe) iframe.remove();
+  iframe = document.createElement('iframe');
+  iframe.id = 'monIframeHome';
+  iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;border:none;';
+  iframe.src = 'https://app.palpita.io/';
+  document.body.appendChild(iframe);
 
-  // Passo 1: Se não temos o slug, descobre
-  if(!MON.eventSlug){
-    await monDiscoverEvent();
-    return;
-  }
-
-  // Passo 2: Busca dados do evento atual
-  await monFetchEvent();
-}
-
-// ── DESCOBRIR EVENTO ATUAL ────────────────────────────
-// O browser já está logado no palpita.io — fetch com
-// credentials envia os cookies automaticamente (sem CORS
-// porque é same-site do ponto de vista do browser)
-async function monDiscoverEvent(){
-  // Endpoints para encontrar o evento de rodovia ativo
-  const targets = [
-    // API de mercados ao vivo
-    { url: 'https://app.palpita.io/api/v1/markets?live=true&per_page=50', json: true },
-    { url: 'https://app.palpita.io/api/v1/markets?category=entretenimento&live=true', json: true },
-    { url: 'https://app.palpita.io/api/v1/markets?per_page=50', json: true },
-    { url: 'https://app.palpita.io/api/v1/events?live=true', json: true },
-    // Página home — extrai __NEXT_DATA__
-    { url: 'https://app.palpita.io/', json: false },
-  ];
-
-  for(const target of targets){
+  let waited = 0;
+  const check = setInterval(()=>{
+    waited += 500;
     try{
-      const res = await fetch(target.url, {
-        method: 'GET',
-        credentials: 'include',
-        headers: {
-          'Accept': target.json ? 'application/json' : 'text/html',
-          'X-Requested-With': 'XMLHttpRequest',
-          'Referer': 'https://app.palpita.io/',
-        },
-        cache: 'no-store',
-      });
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if(!doc || doc.readyState === 'loading') return;
 
-      if(!res.ok){
-        monLog(`⚠️ ${target.url.split('/').slice(-1)[0]}: HTTP ${res.status}`, 'var(--muted)');
-        continue;
-      }
+      const html = doc.body?.innerHTML || doc.documentElement?.innerHTML || '';
 
-      let slug=null, id=null;
-
-      if(target.json){
-        const data = await res.json();
-        const text = JSON.stringify(data);
-        // Procura slug de rodovia no JSON
-        const m = text.match(/rodovia-5-minutos-qu-(\d+)/);
-        if(m){ id=m[1]; slug=`rodovia-5-minutos-qu-${id}`; }
-        // Também procura por campo "slug" em objetos com "rodovia" no nome
-        monLog(`📦 API (${target.url.split('/').slice(-1)[0]}): ${text.slice(0,100)}`, 'var(--muted)');
-      } else {
-        const html = await res.text();
-        // Extrai do __NEXT_DATA__
-        const nm = html.match(/__NEXT_DATA__[^>]*>([\s\S]*?)<\/script>/);
-        if(nm){ try{ const nd=JSON.parse(nm[1]); const t=JSON.stringify(nd); const m=t.match(/rodovia-5-minutos-qu-(\d+)/); if(m){id=m[1];slug=`rodovia-5-minutos-qu-${id}`;} }catch(e){} }
-        // Regex direto no HTML
-        if(!slug){ const m=html.match(/rodovia-5-minutos-qu-(\d+)/); if(m){id=m[1];slug=`rodovia-5-minutos-qu-${id}`;} }
-      }
-
-      if(slug && id){
-        MON.eventSlug = slug;
-        MON.eventId   = id;
-        MON.currentUrl= `https://app.palpita.io/live/${id}-market/${slug}`;
-        const disp=document.getElementById('monUrlDisplay');
-        if(disp){ disp.textContent=MON.currentUrl; disp.style.color='var(--green)'; }
-        monLog(`✅ Evento encontrado: ${slug}`,'var(--green)');
-        monSetStatus('📡','Evento detectado!',`ID: ${id}`,'var(--green)');
-        // Busca dados imediatamente
-        await monFetchEvent();
+      // Procura slug de rodovia
+      const m = html.match(/rodovia-5-minutos-qu-(\d+)/);
+      if(m){
+        clearInterval(check);
+        iframe.remove();
+        const id=m[1], slug=`rodovia-5-minutos-qu-${id}`;
+        monLog(`✅ Slug encontrado no iframe: ${slug}`,'var(--green)');
+        monSetUrl(slug, id);
+        // PASSO 2: Carrega a página do evento
+        monLoadEventPage(slug, id);
         return;
       }
-    } catch(err){
-      monLog(`⚠️ Erro em ${target.url.split('/').slice(-1)[0]}: ${err.message}`, 'var(--muted)');
+
+      // Espera até 8 segundos
+      if(waited >= 8000){
+        clearInterval(check);
+        iframe.remove();
+        monLog('⚠️ Slug não encontrado no iframe da home. Tentando fetch...','var(--gold)');
+        monFetchHomeWithCookies();
+      }
+    }catch(e){
+      // cross-origin — fallback para fetch
+      clearInterval(check);
+      iframe.remove();
+      monLog('⚠️ iframe bloqueou (cross-origin). Usando fetch com cookies...','var(--gold)');
+      monFetchHomeWithCookies();
+    }
+  }, 500);
+}
+
+// ── FALLBACK: FETCH COM COOKIES ───────────────────────────────────
+async function monFetchHomeWithCookies(){
+  monLog('🔍 Fetch da home com credenciais do browser...','var(--muted)');
+  try{
+    const res = await fetch('https://app.palpita.io/', {
+      credentials: 'include',
+      headers: {'Accept':'text/html','Cache-Control':'no-cache'},
+      cache: 'no-store',
+    });
+    if(res.ok){
+      const html = await res.text();
+      const m = html.match(/rodovia-5-minutos-qu-(\d+)/);
+      if(m){
+        const id=m[1], slug=`rodovia-5-minutos-qu-${id}`;
+        monLog(`✅ Slug via fetch: ${slug}`,'var(--green)');
+        monSetUrl(slug, id);
+        monLoadEventPage(slug, id);
+        return;
+      }
+      monLog('⚠️ Slug não encontrado no HTML da home.','var(--gold)');
+      monLog(`📄 Preview HTML: ${html.slice(0,300)}`,'var(--muted)');
+    } else {
+      monLog(`⚠️ Home retornou HTTP ${res.status}. Tentando API...`,'var(--gold)');
+    }
+  }catch(e){
+    monLog(`⚠️ Fetch home erro: ${e.message}`,'var(--gold)');
+  }
+
+  // Tenta APIs REST com cookies
+  monTryAPIs();
+}
+
+async function monTryAPIs(){
+  const apis = [
+    'https://app.palpita.io/api/v1/markets?live=true&per_page=100',
+    'https://app.palpita.io/api/v1/markets?per_page=100',
+    'https://app.palpita.io/api/v1/events?live=true',
+    'https://app.palpita.io/api/markets?live=true',
+  ];
+  for(const api of apis){
+    try{
+      const res = await fetch(api,{
+        credentials:'include',
+        headers:{'Accept':'application/json','X-Requested-With':'XMLHttpRequest'},
+        cache:'no-store',
+      });
+      if(!res.ok){monLog(`⚠️ API ${api.split('?')[0].split('/').pop()}: HTTP ${res.status}`,'var(--muted)');continue;}
+      const ct=res.headers.get('content-type')||'';
+      if(!ct.includes('json')){monLog(`⚠️ API retornou HTML (não JSON)`,'var(--muted)');continue;}
+      const data=await res.json();
+      const txt=JSON.stringify(data);
+      const m=txt.match(/rodovia-5-minutos-qu-(\d+)/);
+      if(m){
+        const id=m[1],slug=`rodovia-5-minutos-qu-${id}`;
+        monLog(`✅ Slug via API: ${slug}`,'var(--green)');
+        monSetUrl(slug,id);
+        monLoadEventPage(slug,id);
+        return;
+      }
+      monLog(`📦 API respondeu mas sem rodovia: ${txt.slice(0,150)}`,'var(--muted)');
+    }catch(e){monLog(`⚠️ API erro: ${e.message}`,'var(--muted)');}
+  }
+  monSetStatus('❌','Não encontrado','Abra o palpita.io neste browser e esteja logado','var(--red)');
+  monLog('❌ Não foi possível detectar o evento. Verifique: 1) Está logado no palpita.io? 2) O evento está ao vivo?','var(--red)');
+}
+
+// ── PASSO 2: CARREGAR PÁGINA DO EVENTO E LER DADOS ───────────────
+function monLoadEventPage(slug, id){
+  monSetStatus('📡','Conectando ao evento...','Carregando dados ao vivo...','var(--gold)');
+  monLog(`📺 Carregando página do evento: ${slug}`,'var(--accent)');
+
+  let iframe = document.getElementById('monIframeEvent');
+  if(iframe) iframe.remove();
+  iframe = document.createElement('iframe');
+  iframe.id = 'monIframeEvent';
+  iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1280px;height:800px;opacity:0;pointer-events:none;border:none;';
+  iframe.src = `https://app.palpita.io/live/${id}-market/${slug}`;
+  document.body.appendChild(iframe);
+  MON.iframe = iframe;
+
+  // Espera o iframe carregar, depois inicia leitura
+  let waited=0;
+  const waitLoad = setInterval(()=>{
+    waited+=500;
+    try{
+      const doc=iframe.contentDocument||iframe.contentWindow?.document;
+      if(doc&&doc.readyState!=='loading'){
+        clearInterval(waitLoad);
+        MON.iframeReady=true;
+        monLog('✅ Página do evento carregada! Iniciando leitura...','var(--green)');
+        monSetStatus('📡','Monitorando ao vivo','Lendo dados do iframe...','var(--green)');
+        // Inicia polling de leitura
+        MON.timer=setInterval(monReadIframe,3000);
+        MON.tickTimer=setInterval(monTick,1000);
+        monReadIframe(); // leitura imediata
+      }
+    }catch(e){
+      // cross-origin → fallback para fetch da página
+      clearInterval(waitLoad);
+      monLog('⚠️ iframe cross-origin. Usando fetch da página do evento...','var(--gold)');
+      monFetchEventPage(slug,id);
+    }
+    if(waited>=12000){
+      clearInterval(waitLoad);
+      monLog('⚠️ Timeout no carregamento do iframe. Usando fetch...','var(--gold)');
+      monFetchEventPage(slug,id);
+    }
+  },500);
+}
+
+// ── LER DOM DO IFRAME ─────────────────────────────────────────────
+function monReadIframe(){
+  if(!MON.running||!MON.iframe) return;
+  try{
+    const doc=MON.iframe.contentDocument||MON.iframe.contentWindow?.document;
+    if(!doc||doc.readyState==='loading') return;
+
+    const html=doc.documentElement.innerHTML;
+    const body=doc.body?.innerText||'';
+
+    // Verifica se o slug mudou (novo ciclo)
+    const slugM=html.match(/rodovia-5-minutos-qu-(\d+)/);
+    if(slugM&&slugM[1]!==MON.eventId){
+      const newId=slugM[1],newSlug=`rodovia-5-minutos-qu-${newId}`;
+      monLog(`🔄 Novo ciclo detectado: ID ${newId} (era ${MON.eventId})`,'var(--accent)');
+      monSetUrl(newSlug,newId);
+      MON.readings=[];MON.signalFired=false;MON.thresholdMais=null;MON.thresholdAte=null;
+      document.getElementById('monSignalCard').style.display='none';
+      // Recarrega iframe com novo slug
+      MON.iframe.src=MON.currentUrl;
+      return;
+    }
+
+    const data=monExtractFromDOM(doc,html,body);
+    if(data){
+      MON.readErrors=0;
+      monProcessData(data);
+    } else {
+      MON.readErrors++;
+      if(MON.readErrors>5) monLog(`⚠️ ${MON.readErrors} leituras sem dados. Página ainda carregando?`,'var(--gold)');
+    }
+  }catch(e){
+    // cross-origin ou outro erro
+    monLog(`⚠️ Erro lendo iframe: ${e.message}. Usando fetch...`,'var(--gold)');
+    clearInterval(MON.timer);
+    monFetchEventPage(MON.eventSlug,MON.eventId);
+  }
+}
+
+// ── EXTRAIR DADOS DO DOM ──────────────────────────────────────────
+function monExtractFromDOM(doc, html, bodyText){
+  const data={};
+
+  // 1. __NEXT_DATA__ — mais confiável (JSON completo do Next.js)
+  try{
+    const scripts=doc.querySelectorAll('script[id="__NEXT_DATA__"]');
+    scripts.forEach(s=>{
+      const nd=JSON.parse(s.textContent);
+      monExtractDeep(nd,data);
+    });
+  }catch(e){}
+
+  // 2. Texto visível do body (mais simples e robusto)
+  if(bodyText){
+    // Contagem atual — número grande em destaque antes de "CONTAGEM ATUAL"
+    // Formato do site: "CONTAGEM ATUAL\n47\nPREVISÕES ENCERRAM EM"
+    const countM = bodyText.match(/CONTAGEM ATUAL[\s\S]{0,50}?(\d{1,4})(?:\s|$)/i)
+                || bodyText.match(/(\d{1,4})\s*\n\s*PREVIS/i);
+    if(countM) data.current_value=Number(countM[1]);
+
+    // Tempo "PREVISÕES ENCERRAM EM MM:SS"
+    const timeM = bodyText.match(/PREVIS[ÕO]ES ENCERRAM EM[\s\S]{0,30}?(\d{1,2}):(\d{2})/i)
+               || bodyText.match(/(\d{1,2}):(\d{2})\s*(?:MINS?|SECS?)/i);
+    if(timeM) data.bet_closes_in=Number(timeM[1])*60+Number(timeM[2]);
+
+    // Thresholds — "Mais de 126" e "Até 126"
+    const maisM=bodyText.match(/Mais\s+de\s+(\d+)/i)||bodyText.match(/MAIS\s+DE\s+(\d+)/);
+    const ateM =bodyText.match(/At[eé]\s+(\d+)/i)   ||bodyText.match(/AT[EÉ]\s+(\d+)/);
+    if(maisM) data.threshold_mais=Number(maisM[1]);
+    if(ateM)  data.threshold_ate =Number(ateM[1]);
+  }
+
+  // 3. HTML direto com regex
+  if(html){
+    if(!data.current_value){
+      const m=html.match(/current.value[":\s]+(\d+)/i)||html.match(/"count[":\s]+(\d+)/);
+      if(m) data.current_value=Number(m[1]);
+    }
+    if(!data.threshold_mais){
+      const m=html.match(/mais[_-]de[":\s]+(\d+)/i)||html.match(/threshold.mais[":\s]+(\d+)/i);
+      if(m) data.threshold_mais=Number(m[1]);
+    }
+    if(!data.threshold_ate){
+      const m=html.match(/[":]at[eé][":\s]+(\d+)/i)||html.match(/threshold.ate[":\s]+(\d+)/i);
+      if(m) data.threshold_ate=Number(m[1]);
+    }
+    if(!data.bet_closes_in){
+      const m=html.match(/bet.closes.in[":\s]+(\d+)/i)||html.match(/closes.in[":\s]+(\d+)/);
+      if(m) data.bet_closes_in=Number(m[1]);
+    }
+    if(!data.result_in){
+      const m=html.match(/result.in[":\s]+(\d+)/i)||html.match(/ends.in[":\s]+(\d+)/);
+      if(m) data.result_in=Number(m[1]);
     }
   }
 
-  monLog('⚠️ Rodovia não encontrada nas APIs. Verifique se está logado no palpita.io neste browser.','var(--red)');
-  monSetStatus('⚠️','Sem evento','Abra o palpita.io neste browser e esteja logado','var(--red)');
+  return Object.keys(data).length>0 ? data : null;
 }
 
-// ── BUSCAR DADOS DO EVENTO ────────────────────────────
-async function monFetchEvent(){
-  // Endpoints específicos do evento
-  const targets = [
-    { url: `https://app.palpita.io/api/v1/markets/${MON.eventSlug}`, json: true },
-    { url: `https://app.palpita.io/api/markets/${MON.eventSlug}`, json: true },
-    { url: `https://app.palpita.io/api/v1/events/${MON.eventSlug}`, json: true },
-    { url: `https://app.palpita.io/live/${MON.eventId}-market/${MON.eventSlug}`, json: false },
-  ];
-
-  for(const target of targets){
+// ── FALLBACK: FETCH DA PÁGINA DO EVENTO ──────────────────────────
+function monFetchEventPage(slug,id){
+  monLog('🔄 Polling via fetch da página do evento...','var(--muted)');
+  MON.timer=setInterval(async()=>{
+    if(!MON.running)return;
     try{
-      const res = await fetch(target.url, {
-        credentials: 'include',
-        headers: {
-          'Accept': target.json ? 'application/json' : 'text/html',
-          'X-Requested-With': 'XMLHttpRequest',
-          'Referer': 'https://app.palpita.io/',
-        },
-        cache: 'no-store',
-      });
-      if(!res.ok) continue;
-
-      let data = null;
-      if(target.json){
-        data = await res.json();
-      } else {
-        const html = await res.text();
-        data = monParseEventHTML(html);
+      // Tenta primeiro re-descobrir (caso ID tenha mudado)
+      const homeRes=await fetch('https://app.palpita.io/',{credentials:'include',cache:'no-store'});
+      if(homeRes.ok){
+        const homeHtml=await homeRes.text();
+        const m=homeHtml.match(/rodovia-5-minutos-qu-(\d+)/);
+        if(m&&m[1]!==MON.eventId){
+          const nId=m[1],nSlug=`rodovia-5-minutos-qu-${nId}`;
+          monLog(`🔄 Novo ciclo: ${nSlug}`,'var(--accent)');
+          monSetUrl(nSlug,nId);
+          MON.readings=[];MON.signalFired=false;MON.thresholdMais=null;MON.thresholdAte=null;
+          document.getElementById('monSignalCard').style.display='none';
+          slug=nSlug;id=nId;
+        }
       }
 
-      if(data){ monProcessData(data); return; }
-    }catch(err){}
-  }
-
-  // Se falhou tudo, reseta slug para re-descobrir
-  monLog('⚠️ Sem dados do evento. Re-buscando...','var(--gold)');
-  MON.eventSlug=''; MON.eventId='';
+      // Busca dados do evento atual
+      const res=await fetch(`https://app.palpita.io/live/${id}-market/${slug}`,{
+        credentials:'include',headers:{'Accept':'text/html'},cache:'no-store',
+      });
+      if(!res.ok){monLog(`⚠️ Evento: HTTP ${res.status}`,'var(--gold)');return;}
+      const html=await res.text();
+      const bt=monExtractTextFromHTML(html);
+      const data=monExtractFromDOM(null,html,bt);
+      if(data) monProcessData(data);
+      else monLog('⚠️ Sem dados no HTML do evento.','var(--muted)');
+    }catch(e){monLog(`⚠️ Fetch erro: ${e.message}`,'var(--muted)');}
+  },3000);
+  MON.tickTimer=setInterval(monTick,1000);
 }
 
-// ── PARSEAR HTML DO EVENTO ────────────────────────────
-function monParseEventHTML(html){
-  const data = {};
-
-  // __NEXT_DATA__ — fonte mais confiável
-  const nm = html.match(/__NEXT_DATA__[^>]*>([\s\S]*?)<\/script>/);
-  if(nm){
-    try{
-      const nd = JSON.parse(nm[1]);
-      monExtractDeep(nd, data);
-      if(Object.keys(data).length > 1) return data;
-    }catch(e){}
-  }
-
-  // Regex direto
-  const patterns = {
-    current_value: [/current_value[":\s]+(\d+)/, /"count[":\s]+(\d+)/, /"value[":\s]+(\d+)/],
-    threshold_mais: [/mais[_-]de[":\s]+(\d+)/i, /threshold_mais[":\s]+(\d+)/i],
-    threshold_ate:  [/[":]at[eé][":\s]+(\d+)/i, /threshold_ate[":\s]+(\d+)/i],
-    bet_closes_in:  [/bet_closes_in[":\s]+(\d+)/, /closes_in[":\s]+(\d+)/],
-    result_in:      [/result_in[":\s]+(\d+)/, /ends_in[":\s]+(\d+)/],
-  };
-
-  for(const [key, pats] of Object.entries(patterns)){
-    for(const pat of pats){
-      const m = html.match(pat);
-      if(m){ data[key]=Number(m[1]); break; }
-    }
-  }
-
-  // Thresholds visíveis no HTML: "Mais de 126" / "Até 126"
-  const maisVis = html.match(/mais\s+de\s+(\d+)/i);
-  const ateVis  = html.match(/at[eé]\s+(\d+)/i);
-  if(maisVis) data.threshold_mais = Number(maisVis[1]);
-  if(ateVis)  data.threshold_ate  = Number(ateVis[1]);
-
-  // Tempo visível MM:SS → segundos
-  const timeVis = html.match(/(\d{1,2}):(\d{2})/);
-  if(timeVis && !data.bet_closes_in)
-    data.bet_closes_in = Number(timeVis[1])*60 + Number(timeVis[2]);
-
-  return Object.keys(data).length > 1 ? data : null;
+function monExtractTextFromHTML(html){
+  // Remove tags e decodifica entidades para simular innerText
+  return html.replace(/<[^>]+>/g,' ').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&').replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(n)).replace(/\s+/g,' ');
 }
 
-// ── EXTRAIR DADOS RECURSIVAMENTE ─────────────────────
-function monExtractDeep(obj, out, depth=0){
-  if(!obj||typeof obj!=='object'||depth>10) return;
-  const FIELDS = {
-    current_value:  ['current_value','value','count','score','quantity','carros'],
-    threshold_mais: ['threshold_mais','mais_de','mais','over','above'],
-    threshold_ate:  ['threshold_ate','ate','under','below'],
-    bet_closes_in:  ['bet_closes_in','closes_in','betting_closes_in'],
-    result_in:      ['result_in','ends_in','time_remaining'],
-    options:        ['options','outcomes','selections'],
-    slug:           ['slug','market_slug'],
+// ── EXTRAÇÃO PROFUNDA ─────────────────────────────────────────────
+function monExtractDeep(obj,out,depth=0){
+  if(!obj||typeof obj!=='object'||depth>12)return;
+  const F={
+    current_value:['current_value','value','count','score','quantity','carros','cars','car_count'],
+    threshold_mais:['threshold_mais','mais_de','mais','over','above','upper_threshold'],
+    threshold_ate: ['threshold_ate','ate','under','below','lower_threshold'],
+    bet_closes_in: ['bet_closes_in','closes_in','betting_closes_in','close_in','previsao_encerra'],
+    result_in:     ['result_in','ends_in','time_remaining','duration','remaining'],
+    options:       ['options','outcomes','selections','choices','bets'],
   };
-  for(const [key,fields] of Object.entries(FIELDS)){
+  for(const[k,fields]of Object.entries(F)){
     for(const f of fields){
-      if(obj[f]!==undefined && out[key]===undefined){ out[key]=obj[f]; }
+      if(obj[f]!==undefined&&out[k]===undefined)out[k]=obj[f];
     }
   }
   for(const v of Object.values(obj)){
-    if(typeof v==='object'&&v!==null) monExtractDeep(v,out,depth+1);
+    if(typeof v==='object'&&v!==null)monExtractDeep(v,out,depth+1);
   }
 }
 
-// ── PROCESSAR DADOS ───────────────────────────────────
+// ── PROCESSAR DADOS ───────────────────────────────────────────────
 function monProcessData(rawData){
-  const data = {};
-  monExtractDeep(rawData, data);
+  const data={};
+  if(typeof rawData==='object')monExtractDeep(rawData,data);
 
-  // Thresholds das options (ex: [{label:'Mais de 126'}, {label:'Até 126'}])
-  if(data.options && Array.isArray(data.options)){
+  // Thresholds das options
+  if(data.options&&Array.isArray(data.options)){
     data.options.forEach(opt=>{
-      const lbl = String(opt.label||opt.name||opt.title||opt.description||'');
-      const m = lbl.match(/(\d+)/);
-      if(!m) return;
-      const n = Number(m[1]);
-      if(/mais/i.test(lbl)||/over/i.test(lbl))  MON.thresholdMais=n;
-      if(/at[eé]/i.test(lbl)||/under/i.test(lbl)) MON.thresholdAte=n;
+      const lbl=String(opt.label||opt.name||opt.title||opt.description||'');
+      const m=lbl.match(/(\d+)/);if(!m)return;const n=Number(m[1]);
+      if(/mais/i.test(lbl)||/over/i.test(lbl))MON.thresholdMais=n;
+      if(/at[eé]/i.test(lbl)||/under/i.test(lbl))MON.thresholdAte=n;
     });
   }
-  if(data.threshold_mais!==undefined) MON.thresholdMais=Number(data.threshold_mais);
-  if(data.threshold_ate!==undefined)  MON.thresholdAte =Number(data.threshold_ate);
-  if(data.bet_closes_in!==undefined)  MON.betClosesSec =Number(data.bet_closes_in);
-  if(data.result_in!==undefined)      MON.resultSec    =Number(data.result_in);
+  if(data.threshold_mais!==undefined)MON.thresholdMais=Number(data.threshold_mais);
+  if(data.threshold_ate!==undefined) MON.thresholdAte =Number(data.threshold_ate);
+  if(data.bet_closes_in!==undefined) MON.betClosesSec =Number(data.bet_closes_in);
+  if(data.result_in!==undefined)     MON.resultSec    =Number(data.result_in);
 
-  // Detecta novo evento (slug mudou nos dados)
-  if(data.slug && data.slug!==MON.eventSlug && data.slug.includes('rodovia')){
-    const m=data.slug.match(/(\d+)$/);
-    if(m){ MON.eventId=m[1]; MON.eventSlug=data.slug; MON.readings=[]; MON.signalFired=false; MON.currentUrl=`https://app.palpita.io/live/${MON.eventId}-market/${MON.eventSlug}`; monLog(`🔄 Novo ciclo detectado: ${data.slug}`,'var(--accent)'); }
-  }
-
-  const count = data.current_value!==undefined ? Number(data.current_value) : null;
-  if(count!==null && !isNaN(count) && count>=0 && count<10000){
-    MON.readings.push({ts:Date.now(), count});
-    if(MON.readings.length>80) MON.readings=MON.readings.slice(-80);
-    MON.lastDataTs=Date.now();
+  const count=data.current_value!==undefined?Number(data.current_value):null;
+  if(count!==null&&!isNaN(count)&&count>=0&&count<10000){
+    MON.readings.push({ts:Date.now(),count});
+    if(MON.readings.length>80)MON.readings=MON.readings.slice(-80);
     monUpdateUI(count);
     monUpdateThresholdsUI();
     const proj=monCalcProjection();
-    if(proj!==null) monUpdateBar(proj);
-    monLog(`🚗 ${count} carros | Apostas: ${MON.betClosesSec??'?'}s | Proj: ${proj!==null?Math.round(proj):'?'}`,'var(--text)');
+    if(proj!==null)monUpdateBar(proj);
+    monLog(`🚗 ${count} carros | Apostas: ${MON.betClosesSec??'?'}s | Leituras: ${MON.readings.length}`,'var(--text)');
     monCheckTrigger();
+    monSetStatus('📡','Monitorando ao vivo',`${MON.readings.length} leituras | ID: ${MON.eventId}`,'var(--green)');
+  }else if(MON.thresholdMais||MON.thresholdAte){
+    monUpdateThresholdsUI();
+    monLog(`📊 Thresholds: MAIS DE ${MON.thresholdMais} / ATÉ ${MON.thresholdAte}`,'var(--muted)');
   }
-
-  monSetStatus('📡','Monitorando ao vivo',`${MON.readings.length} leituras — Evento: ${MON.eventId}`,'var(--green)');
 }
 
-// ── TICK (countdown local entre fetches) ──────────────
+// ── TICK ──────────────────────────────────────────────────────────
 function monTick(){
-  if(!MON.running) return;
-  if(MON.betClosesSec!==null && MON.betClosesSec>0) MON.betClosesSec--;
-  if(MON.resultSec!==null && MON.resultSec>0) MON.resultSec--;
-
+  if(!MON.running)return;
+  if(MON.betClosesSec!==null&&MON.betClosesSec>0)MON.betClosesSec--;
+  if(MON.resultSec!==null&&MON.resultSec>0)MON.resultSec--;
   const bt=document.getElementById('monBetTime');
-  if(bt && MON.betClosesSec!==null){
+  if(bt&&MON.betClosesSec!==null){
     bt.textContent=MON.betClosesSec;
     bt.style.color=MON.betClosesSec<=30?'var(--red)':MON.betClosesSec<=60?'var(--gold)':'var(--accent3)';
   }
-
-  // Fim do ciclo: busca novo evento
   if(MON.resultSec===0){
-    monLog('🔄 Ciclo encerrado. Buscando novo evento em 5s...','var(--accent)');
-    MON.eventSlug=''; MON.eventId=''; MON.readings=[]; MON.signalFired=false;
-    MON.betClosesSec=null; MON.resultSec=null;
-    MON.thresholdMais=null; MON.thresholdAte=null;
+    monLog('🔄 Resultado saiu. Buscando novo evento em 5s...','var(--accent)');
+    MON.eventSlug='';MON.eventId='';MON.readings=[];MON.signalFired=false;
+    MON.betClosesSec=null;MON.resultSec=null;MON.thresholdMais=null;MON.thresholdAte=null;
     document.getElementById('monThresholds').style.display='none';
     document.getElementById('monSignalCard').style.display='none';
+    clearInterval(MON.timer);MON.timer=null;
+    const iframe=document.getElementById('monIframeEvent');if(iframe)iframe.remove();
+    setTimeout(()=>{if(MON.running)monLoadHome();},5000);
   }
-
-  // Verifica disparo a cada tick
-  if(MON.readings.length>=2) monCheckTrigger();
+  if(MON.readings.length>=2)monCheckTrigger();
 }
 
-// ── UI ────────────────────────────────────────────────
+// ── UI ────────────────────────────────────────────────────────────
 function monUpdateUI(count){
   const cc=document.getElementById('monCurrentCount');
-  if(cc){ cc.textContent=count; cc.style.color=monCountColor(count); }
-  const rc=document.getElementById('monReadings');
-  if(rc) rc.textContent=MON.readings.length;
+  if(cc){cc.textContent=count;cc.style.color=monCountColor(count);}
+  const rc=document.getElementById('monReadings');if(rc)rc.textContent=MON.readings.length;
   const proj=monCalcProjection();
   if(proj!==null){
     const pe=document.getElementById('monProjected');
-    if(pe){ pe.textContent=Math.round(proj); pe.style.color=monCountColor(Math.round(proj)); }
+    if(pe){pe.textContent=Math.round(proj);pe.style.color=monCountColor(Math.round(proj));}
   }
 }
-
 function monCountColor(n){
-  if(MON.thresholdMais!==null&&n>MON.thresholdMais) return 'var(--green)';
-  if(MON.thresholdAte!==null&&n<=MON.thresholdAte)  return 'var(--red)';
-  return 'var(--gold)';
+  if(MON.thresholdMais!==null&&n>MON.thresholdMais)return'var(--green)';
+  if(MON.thresholdAte!==null&&n<=MON.thresholdAte)return'var(--red)';
+  return'var(--gold)';
 }
-
 function monUpdateThresholdsUI(){
-  const el=document.getElementById('monThresholds'); if(!el) return;
+  const el=document.getElementById('monThresholds');if(!el)return;
   if(MON.thresholdMais!==null||MON.thresholdAte!==null){
     el.style.display='';
     const s=id=>document.getElementById(id);
-    if(MON.thresholdMais!==null){ s('monThresholdMais').textContent=MON.thresholdMais; s('monBarMais').textContent=MON.thresholdMais; }
-    if(MON.thresholdAte!==null){  s('monThresholdAte').textContent=MON.thresholdAte;   s('monBarAte').textContent=MON.thresholdAte; }
+    if(MON.thresholdMais!==null){if(s('monThresholdMais'))s('monThresholdMais').textContent=MON.thresholdMais;if(s('monBarMais'))s('monBarMais').textContent=MON.thresholdMais;}
+    if(MON.thresholdAte!==null){if(s('monThresholdAte'))s('monThresholdAte').textContent=MON.thresholdAte;if(s('monBarAte'))s('monBarAte').textContent=MON.thresholdAte;}
   }
 }
 
-// ── REGRESSÃO LINEAR ──────────────────────────────────
+// ── REGRESSÃO LINEAR ──────────────────────────────────────────────
 function monCalcProjection(){
-  if(MON.readings.length<2) return MON.readings.length===1?MON.readings[0].count:null;
+  if(MON.readings.length<2)return MON.readings.length===1?MON.readings[0].count:null;
   const recent=MON.readings.slice(-20),n=recent.length,now=Date.now();
   const pts=recent.map(r=>({x:(r.ts-now)/1000,y:r.count}));
   const xM=pts.reduce((a,p)=>a+p.x,0)/n,yM=pts.reduce((a,p)=>a+p.y,0)/n;
   const num=pts.reduce((a,p)=>a+(p.x-xM)*(p.y-yM),0),den=pts.reduce((a,p)=>a+(p.x-xM)**2,0);
-  if(den===0) return yM;
+  if(den===0)return yM;
   const slope=num/den,intercept=yM-slope*xM;
-  // Projeta para o momento do resultado
-  const secsLeft=MON.resultSec??60;
-  return Math.max(0, intercept+slope*secsLeft);
+  return Math.max(0,intercept+slope*(MON.resultSec??60));
 }
 
-// ── BARRA ─────────────────────────────────────────────
+// ── BARRA + SINAL ─────────────────────────────────────────────────
 function monUpdateBar(value){
   const bar=document.getElementById('monProgressBar'),lbl=document.getElementById('monPredLabel'),conf=document.getElementById('monConfLabel');
-  if(!bar||!lbl) return;
-  if(MON.thresholdMais===null||MON.thresholdAte===null){ lbl.textContent='Aguardando limites...'; return; }
+  if(!bar||!lbl)return;
+  if(MON.thresholdMais===null||MON.thresholdAte===null){lbl.textContent='Aguardando limites...';return;}
   const mid=(MON.thresholdMais+MON.thresholdAte)/2,range=Math.max(MON.thresholdMais-MON.thresholdAte,1);
   const pct=Math.max(5,Math.min(95,((value-MON.thresholdAte+range)/(range*2))*100));
   bar.style.width=pct+'%';
   const{result,confidence,color}=monCalcSignal(value);
   bar.style.background=result==='MAIS DE'?'linear-gradient(90deg,#00aa44,var(--green))':'linear-gradient(90deg,var(--red),#880000)';
-  if(result){ const t=result==='MAIS DE'?MON.thresholdMais:MON.thresholdAte; lbl.textContent=`→ ${result} ${t} CARROS`; lbl.style.color=color; conf.textContent=`Confiança: ${confidence}% | Projeção: ${Math.round(value)}`; }
+  if(result){const t=result==='MAIS DE'?MON.thresholdMais:MON.thresholdAte;lbl.textContent=`→ ${result} ${t} CARROS`;lbl.style.color=color;conf.textContent=`Confiança: ${confidence}% | Projeção: ${Math.round(value)} carros`;}
 }
-
 function monCalcSignal(v){
-  if(MON.thresholdMais===null||MON.thresholdAte===null) return{result:null,confidence:0,color:'var(--muted)'};
+  if(MON.thresholdMais===null||MON.thresholdAte===null)return{result:null,confidence:0,color:'var(--muted)'};
   const mid=(MON.thresholdMais+MON.thresholdAte)/2,range=Math.max(MON.thresholdMais-MON.thresholdAte,1);
   const dist=Math.abs(v-mid),confidence=Math.min(99,Math.round(50+(dist/(range*3))*49));
   return v>mid?{result:'MAIS DE',confidence,color:'var(--green)'}:{result:'ATÉ',confidence,color:'var(--red)'};
 }
 
-// ── DISPARO ───────────────────────────────────────────
+// ── DISPARO ───────────────────────────────────────────────────────
 function monCheckTrigger(){
-  if(MON.signalFired) return;
+  if(MON.signalFired)return;
   const minR=parseInt(document.getElementById('monMinReadings').value)||5;
   const trigSec=parseInt(document.getElementById('monTriggerSec').value)||30;
-  if(MON.readings.length<minR) return;
-  if(MON.betClosesSec===null||MON.betClosesSec>trigSec) return;
+  if(MON.readings.length<minR)return;
+  if(MON.betClosesSec===null||MON.betClosesSec>trigSec)return;
   monFireSignal();
 }
 
 async function monFireSignal(){
   MON.signalFired=true;
-  const proj=monCalcProjection(); if(proj===null){monLog('⚠️ Sem projeção.','var(--gold)');return;}
-  const{result,confidence,color}=monCalcSignal(proj); if(!result){monLog('⚠️ Thresholds não detectados.','var(--gold)');return;}
+  const proj=monCalcProjection();if(proj===null){monLog('⚠️ Sem projeção.','var(--gold)');return;}
+  const{result,confidence,color}=monCalcSignal(proj);if(!result){monLog('⚠️ Thresholds não detectados.','var(--gold)');return;}
   const threshold=result==='MAIS DE'?MON.thresholdMais:MON.thresholdAte;
   const resultLabel=`${result} ${threshold} CARROS`;
   const url=MON.currentUrl;
@@ -1463,9 +1600,9 @@ async function monFireSignal(){
   MON.signalMD=`**${titulo} — 🚗 Rodovia — 5 minutos**\n${SEP}\n__🎯 Resultado:__ **${resultLabel}**\n__🚗 Projeção:__ **${Math.round(proj)} carros**\n__📊 Confiança:__ **${confidence}%**\n__🕒 Horário:__ ${timeStr} BRT\n${SEP}\n${CFG.showEntrada?'⚡ **Entrada válida AGORA**\n':''}${CFG.showRisk?'⚠️ __Palpites envolvem risco.__\n':''}\n👉 **LINK DO EVENTO:**\n${url}${CFG.footer?'\n\n'+CFG.footer:''}`;
   const eH=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   MON.signalBot=`<b>${titulo} — 🚗 Rodovia — 5 minutos</b>\n${SEP}\n<u>🎯 Resultado:</u> <b>${resultLabel}</b>\n<u>🚗 Projeção:</u> <b>${Math.round(proj)} carros</b>\n<u>📊 Confiança:</u> <b>${confidence}%</b>\n<u>🕒 Horário:</u> ${timeStr} BRT\n${SEP}\n${CFG.showEntrada?'⚡ <b>Entrada válida AGORA</b>\n':''}${CFG.showRisk?'⚠️ <i>Palpites envolvem risco.</i>\n':''}\n👉 <b>LINK DO EVENTO:</b>\n${eH(url)}${CFG.footer?'\n\n'+eH(CFG.footer):''}`;
-  const sc=document.getElementById('monSignalCard'); if(sc) sc.style.display='';
-  const sr=document.getElementById('monSignalResult'); if(sr){sr.textContent=resultLabel;sr.style.color=color;}
-  const sconf=document.getElementById('monSignalConf'); if(sconf) sconf.textContent=`Confiança: ${confidence}% | Projeção: ${Math.round(proj)} carros`;
+  const sc=document.getElementById('monSignalCard');if(sc)sc.style.display='';
+  const sr=document.getElementById('monSignalResult');if(sr){sr.textContent=resultLabel;sr.style.color=color;}
+  const sconf=document.getElementById('monSignalConf');if(sconf)sconf.textContent=`Confiança: ${confidence}% | Projeção: ${Math.round(proj)} carros`;
   monLog(`🚨 SINAL DISPARADO: ${resultLabel} (${confidence}%)`,color);
   showToast(`🚨 ${resultLabel}!`);
   try{
@@ -1473,27 +1610,26 @@ async function monFireSignal(){
     await addDoc(collection(db,`usuarios/${uid()}/historico`),{ev:'rodovia',label:'🚗 Rodovia — Auto',resultado:resultLabel,conf:String(confidence),tg:MON.signalMD,timeStr,ts:serverTimestamp()});
     monLog('✅ Salvo no histórico.','var(--green)');
   }catch(e){monLog('⚠️ Erro histórico: '+e.message,'var(--gold)');}
-  if(document.getElementById('monAutoSend').checked){ await monSendNow(); }
+  if(document.getElementById('monAutoSend').checked)await monSendNow();
   setTimeout(()=>{
-    MON.signalFired=false; MON.readings=[];
-    const sc=document.getElementById('monSignalCard'); if(sc) sc.style.display='none';
+    MON.signalFired=false;MON.readings=[];
+    const sc=document.getElementById('monSignalCard');if(sc)sc.style.display='none';
     monLog('🔄 Resetado para próximo ciclo.','var(--muted)');
   },120000);
 }
 
 async function monSendNow(){
-  if(!MON.signalBot){showToast('⚠️ Nenhum sinal gerado.','error');return;}
+  if(!MON.signalBot){showToast('⚠️ Nenhum sinal.','error');return;}
   const cfg=getBotCfg(),token=cfg.token,channels=(cfg.channels||[]).filter(c=>c.active!==false);
-  if(!token){showToast('⚠️ Configure o BOT TOKEN na aba 🤖 Bot.','error');return;}
+  if(!token){showToast('⚠️ Configure BOT TOKEN.','error');return;}
   if(!channels.length){showToast('⚠️ Adicione um canal.','error');return;}
   let ok=0,fail=0;
   for(const ch of channels){try{const r=await tgSend(token,ch.id,MON.signalBot);if(r.ok)ok++;else fail++;}catch(e){fail++;}}
   monLog(ok>0?`✅ Enviado para ${ok} canal(is)!`:'❌ Falha.',ok>0?'var(--green)':'var(--red)');
   if(ok>0)showToast(`✅ Enviado para ${ok} canal(is)!`);
 }
-
 function monCopySignal(){
-  if(!MON.signalMD){showToast('⚠️ Nenhum sinal gerado.','error');return;}
+  if(!MON.signalMD){showToast('⚠️ Nenhum sinal.','error');return;}
   navigator.clipboard.writeText(MON.signalMD).then(()=>showToast('✅ Copiado!')).catch(()=>{const t=document.getElementById('_clipHelper');t.value=MON.signalMD;t.select();document.execCommand('copy');showToast('✅ Copiado!');});
 }
 
@@ -1501,6 +1637,8 @@ function monStop(showUI=true){
   MON.running=false;
   if(MON.timer){clearInterval(MON.timer);MON.timer=null;}
   if(MON.tickTimer){clearInterval(MON.tickTimer);MON.tickTimer=null;}
+  ['monIframeHome','monIframeEvent'].forEach(id=>{const el=document.getElementById(id);if(el)el.remove();});
+  MON.iframe=null;
   if(showUI){
     document.getElementById('monStartBtn').style.display='';
     document.getElementById('monStopBtn').style.display='none';
@@ -1510,7 +1648,7 @@ function monStop(showUI=true){
     monLog('■ Monitor parado.','var(--muted)');
   }
 }
-function monitorStop(){ monStop(true); }
+function monitorStop(){monStop(true);}
 </script>
 
 </body>
