@@ -473,7 +473,7 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
   <div style="margin:4px 0 20px;display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;">
     <div>
       <h2 style="font-size:18px;font-weight:800;">🚗 Monitor Automático — Rodovia</h2>
-      <p style="font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-top:4px;">Lê dados ao vivo do palpita.io e dispara sinais automaticamente</p>
+      <p style="font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-top:4px;">Scraping direto do palpita.io via bookmarklet — dados em tempo real</p>
     </div>
     <div style="display:flex;gap:8px;align-items:center;">
       <div id="monLiveTag" style="display:none;background:rgba(255,61,90,.15);border:1px solid rgba(255,61,90,.4);color:var(--red);padding:5px 14px;border-radius:100px;font-size:11px;font-family:var(--font-mono);font-weight:700;animation:pulse 1s infinite;">● AO VIVO</div>
@@ -482,26 +482,35 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
     </div>
   </div>
 
+  <!-- BOOKMARKLET BANNER -->
+  <div style="background:linear-gradient(135deg,rgba(124,58,237,.15),rgba(0,212,255,.1));border:1px solid rgba(124,58,237,.4);border-radius:16px;padding:22px 24px;margin-bottom:20px;">
+    <div style="font-size:14px;font-weight:800;color:#a78bfa;margin-bottom:10px;">📎 Passo 1 — Instalar o Bookmarklet (faça uma vez)</div>
+    <div style="font-size:12px;color:var(--muted);font-family:var(--font-mono);line-height:1.9;margin-bottom:16px;">
+      Arraste o botão abaixo para a <strong style="color:var(--text);">barra de favoritos</strong> do Chrome.<br>
+      Não aparece a barra? Pressione <strong style="color:var(--text);">Ctrl+Shift+B</strong>.
+    </div>
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+      <a id="monBookmarklet" href="#"
+         style="background:linear-gradient(135deg,#7c3aed,#00d4ff);color:#fff;padding:12px 22px;border-radius:12px;font-family:var(--font-head);font-size:14px;font-weight:800;text-decoration:none;cursor:grab;white-space:nowrap;box-shadow:0 4px 20px rgba(124,58,237,.4);"
+         onclick="return false;">
+        ⚡ SinalPRO Monitor
+      </a>
+      <span style="font-size:11px;color:var(--muted);font-family:var(--font-mono);">← arraste para a barra de favoritos</span>
+    </div>
+    <div style="margin-top:14px;font-size:11px;color:var(--muted);font-family:var(--font-mono);line-height:1.9;">
+      <strong style="color:var(--text);">Passo 2:</strong> Clique em <strong style="color:var(--green);">▶ Iniciar Monitor</strong> nesta aba<br>
+      <strong style="color:var(--text);">Passo 3:</strong> Vá para a aba do <strong style="color:var(--text);">palpita.io</strong> com o evento de Rodovia<br>
+      <strong style="color:var(--text);">Passo 4:</strong> Clique no favorito <strong style="color:#a78bfa;">⚡ SinalPRO Monitor</strong> na barra<br>
+      <strong style="color:var(--text);">Passo 5:</strong> Volte para esta aba — dados chegam automaticamente ✅
+    </div>
+  </div>
+
   <div class="grid" style="margin-bottom:20px;">
-    <!-- CONFIG -->
     <div class="card">
       <div class="card-title">⚙ Configuração</div>
-      <!-- URL detectada -->
       <div style="background:rgba(0,230,118,.06);border:1px solid rgba(0,230,118,.2);border-radius:10px;padding:12px 14px;margin-bottom:14px;">
-        <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:6px;">📡 Evento Monitorado</div>
-        <div id="monUrlDisplay" style="font-size:11px;font-family:var(--font-mono);color:var(--muted);word-break:break-all;">Aguardando detecção...</div>
-      </div>
-      <!-- ID Manual -->
-      <div class="field">
-        <label>ID do Evento <span style="color:var(--muted);font-size:9px;">(opcional — preencha se não detectar)</span></label>
-        <div style="display:flex;gap:8px;">
-          <input type="text" id="monManualId" placeholder="Ex: 14738" style="font-family:var(--font-mono);flex:1;"
-            oninput="document.getElementById('monManualId').value=this.value.replace(/[^0-9]/g,'')">
-          <button class="btn btn-secondary" style="width:auto;padding:10px 16px;" onclick="monApplyManualId()">Usar</button>
-        </div>
-        <div style="font-size:10px;color:var(--muted);font-family:var(--font-mono);margin-top:6px;">
-          Veja o ID na URL: app.palpita.io/live/<strong style="color:var(--accent);">14738</strong>-market/rodovia...
-        </div>
+        <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:4px;">📡 Evento Monitorado</div>
+        <div id="monUrlDisplay" style="font-size:11px;font-family:var(--font-mono);color:var(--muted);word-break:break-all;">Aguardando bookmarklet...</div>
       </div>
       <div class="field">
         <label>Disparar sinal quando faltar (segundos)</label>
@@ -511,26 +520,21 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
         <label>Mínimo de leituras para disparar</label>
         <input type="number" id="monMinReadings" value="5" min="2" max="30" style="font-family:var(--font-mono);">
       </div>
-      <div style="display:flex;gap:10px;align-items:center;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:12px;">
+      <div style="display:flex;gap:10px;align-items:center;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px;">
         <div style="flex:1;">
           <div style="font-size:13px;font-weight:700;color:var(--text);">Envio automático pelo Bot</div>
           <div style="font-size:11px;color:var(--muted);font-family:var(--font-mono);">Usa configurações da aba 🤖 Bot</div>
         </div>
         <label class="toggle"><input type="checkbox" id="monAutoSend" checked><span class="toggle-slider"></span></label>
       </div>
-      <div style="background:rgba(0,212,255,.05);border:1px solid rgba(0,212,255,.15);border-radius:10px;padding:12px;font-size:11px;color:var(--muted);font-family:var(--font-mono);line-height:1.8;">
-        ℹ️ O monitor lê os dados da página do palpita.io via API REST a cada 3 segundos.<br>
-        Funciona das <strong style="color:var(--text);">09:00 às 23:30 BRT</strong> todos os dias.
-      </div>
     </div>
 
-    <!-- STATUS -->
     <div class="card">
       <div class="card-title">📡 Status</div>
       <div style="text-align:center;padding:16px 0;">
         <div id="monStatusIcon" style="font-size:42px;margin-bottom:10px;">⏸️</div>
         <div id="monStatusText" style="font-size:15px;font-weight:800;color:var(--muted);">Aguardando início</div>
-        <div id="monStatusSub" style="font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-top:4px;">Configure e clique em Iniciar</div>
+        <div id="monStatusSub" style="font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-top:4px;">Clique em Iniciar</div>
       </div>
       <div class="divider"></div>
       <div id="monThresholds" style="display:none;">
@@ -552,14 +556,14 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
   <!-- DASHBOARD -->
   <div class="card" style="margin-bottom:20px;">
     <div class="card-title">📊 Dados em Tempo Real</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px;">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:14px;margin-bottom:20px;">
       <div style="text-align:center;padding:16px;background:var(--bg);border:1px solid var(--border);border-radius:12px;">
-        <div style="font-size:10px;font-family:var(--font-mono);color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">Contagem Atual</div>
+        <div style="font-size:10px;font-family:var(--font-mono);color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">Contagem</div>
         <div id="monCurrentCount" style="font-size:44px;font-weight:900;color:var(--gold);line-height:1;">—</div>
         <div style="font-size:10px;color:var(--muted);margin-top:4px;">carros</div>
       </div>
       <div style="text-align:center;padding:16px;background:var(--bg);border:1px solid var(--border);border-radius:12px;">
-        <div style="font-size:10px;font-family:var(--font-mono);color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">Projeção Final</div>
+        <div style="font-size:10px;font-family:var(--font-mono);color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">Projeção</div>
         <div id="monProjected" style="font-size:44px;font-weight:900;color:var(--accent);line-height:1;">—</div>
         <div style="font-size:10px;color:var(--muted);margin-top:4px;">estimado</div>
       </div>
@@ -574,7 +578,6 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
         <div style="font-size:10px;color:var(--muted);margin-top:4px;">coletadas</div>
       </div>
     </div>
-    <!-- BARRA -->
     <div>
       <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
         <span style="font-size:11px;font-family:var(--font-mono);color:var(--red);">ATÉ <span id="monBarAte">—</span></span>
@@ -591,7 +594,7 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
     </div>
   </div>
 
-  <!-- SINAL GERADO -->
+  <!-- SINAL -->
   <div id="monSignalCard" style="display:none;margin-bottom:20px;">
     <div class="card">
       <div class="card-title" style="color:var(--green);">🚨 SINAL AUTOMÁTICO DISPARADO</div>
@@ -1055,498 +1058,438 @@ document.addEventListener('DOMContentLoaded', function(){
 <!-- MONITOR SCRIPT -->
 <script>
 // ═══════════════════════════════════════════════════════════════
-// MONITOR AUTOMÁTICO — RODOVIA PALPITA.IO  v5.0
+// MONITOR AUTOMÁTICO — RODOVIA PALPITA.IO  v6.0
+// SCRAPING via Bookmarklet + BroadcastChannel
 //
-// COMO FUNCIONA:
-// O palpita.io tem um endpoint de "wsm" (WebSocket Message) que
-// retorna dados JSON do evento. Visto no DevTools com status 200.
-// URL padrão: https://app.palpita.io/wsm/rodovia-5-minutos-qu-XXXXX
-// Também tenta: /api/v1/markets/rodovia-5-minutos-qu-XXXXX
-// 
-// Para descobrir o ID atual, lê a home via fetch com cookies.
-// Se falhar, o usuário informa o ID manualmente.
+// O bookmarklet roda DENTRO do palpita.io (sem CORS)
+// e envia dados via BroadcastChannel para esta aba.
 // ═══════════════════════════════════════════════════════════════
 
 const MON = {
-  timer: null,
-  tickTimer: null,
+  bc: null, tickTimer: null,
   readings: [],
-  thresholdMais: null,
-  thresholdAte:  null,
-  betClosesSec:  null,
-  resultSec:     null,
-  signalFired:   false,
+  thresholdMais: null, thresholdAte: null,
+  betClosesSec: null,
+  signalFired: false,
   signalMD: '', signalBot: '',
   running: false,
-  eventSlug: '', eventId: '', currentUrl: '',
-  consecutiveErrors: 0,
-  lastCount: null,
+  eventId: '', eventSlug: '', currentUrl: '',
 };
 
-const PALPITA = 'https://app.palpita.io';
-
-// ── LOG ──────────────────────────────────────────────────────────
-function monLog(msg, c='var(--muted)'){
-  const el=document.getElementById('monLog'); if(!el) return;
-  const t=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:'America/Sao_Paulo'});
-  const d=document.createElement('div'); d.style.color=c; d.textContent=`[${t}] ${msg}`;
-  el.insertBefore(d,el.firstChild);
-  while(el.children.length>300) el.removeChild(el.lastChild);
-}
-function monSt(icon,text,sub,c='var(--muted)'){
-  const g=id=>document.getElementById(id);
-  if(g('monStatusIcon')) g('monStatusIcon').textContent=icon;
-  if(g('monStatusText')){ g('monStatusText').textContent=text; g('monStatusText').style.color=c; }
-  if(g('monStatusSub'))  g('monStatusSub').textContent=sub;
-}
-function monSetEvent(id, slug){
-  MON.eventId=id; MON.eventSlug=slug;
-  MON.currentUrl=`${PALPITA}/live/${id}-market/${slug}`;
-  const d=document.getElementById('monUrlDisplay');
-  if(d){ d.textContent=MON.currentUrl; d.style.color='var(--green)'; }
-  monLog(`✅ Evento: ${slug}`,'var(--green)');
-}
-
-// ── BOTÃO "USAR" ID MANUAL ────────────────────────────────────────
-function monApplyManualId(){
-  const id=document.getElementById('monManualId').value.trim();
-  if(!id){ showToast('⚠️ Digite o ID do evento','error'); return; }
-  const slug=`rodovia-5-minutos-qu-${id}`;
-  monSetEvent(id, slug);
-  MON.readings=[]; MON.signalFired=false; MON.thresholdMais=null; MON.thresholdAte=null;
-  showToast(`✅ ID ${id} aplicado!`);
-  monLog(`🔧 ID definido manualmente: ${id}`,'var(--accent)');
-  // Se o monitor já está rodando, começa a coletar imediatamente
-  if(MON.running) monFetch();
-}
-
-// ── INICIAR ──────────────────────────────────────────────────────
-function monitorStart(){
-  const brt=new Date(new Date().toLocaleString('en-US',{timeZone:'America/Sao_Paulo'}));
-  const hm=brt.getHours()*60+brt.getMinutes();
-  if(hm<9*60||hm>23*60+30){
-    showToast('⚠️ Fora do horário (09:00–23:30 BRT)','error');
-    monLog('⚠️ Fora do horário','var(--red)'); return;
-  }
-
-  monitorStop(false);
-  MON.running=true; MON.readings=[]; MON.signalFired=false;
-  MON.thresholdMais=null; MON.thresholdAte=null;
-  MON.betClosesSec=null; MON.resultSec=null; MON.consecutiveErrors=0;
-
-  document.getElementById('monStartBtn').style.display='none';
-  document.getElementById('monStopBtn').style.display='';
-  document.getElementById('monLiveTag').style.display='';
-  document.getElementById('monitorBadge').style.display='';
-  document.getElementById('monSignalCard').style.display='none';
-
-  // Se já tem ID manual definido, usa direto
-  const manualId=document.getElementById('monManualId').value.trim();
-  if(manualId && !MON.eventId){
-    const slug=`rodovia-5-minutos-qu-${manualId}`;
-    monSetEvent(manualId, slug);
-  }
-
-  if(MON.eventId){
-    // Já tem evento — começa a coletar
-    monLog('▶ Iniciando coleta de dados...','var(--accent)');
-    monSt('📡','Monitorando...','Coletando dados do evento','var(--gold)');
-    monFetch();
-  } else {
-    // Descobre o ID automaticamente
-    monSt('🔍','Buscando evento...','Procurando rodovia ativa no palpita.io','var(--gold)');
-    monLog('🔍 Buscando ID do evento...','var(--accent)');
-    monDiscover();
-  }
-
-  MON.timer=setInterval(monFetch, 3000);
-  MON.tickTimer=setInterval(monTick, 1000);
-}
-
-// ── DESCOBERTA AUTOMÁTICA DO ID ───────────────────────────────────
-async function monDiscover(){
-  // Tenta múltiplos endpoints com cookies do browser
-  const attempts = [
-    // 1. Home page — contém o slug no HTML/JSON
-    ()=>fetchText(`${PALPITA}/`),
-    // 2. API de mercados ao vivo
-    ()=>fetchJSON(`${PALPITA}/api/v1/markets?live=true&per_page=100`),
-    ()=>fetchJSON(`${PALPITA}/api/v1/markets?category=entretenimento&per_page=100`),
-    ()=>fetchJSON(`${PALPITA}/api/v1/markets?per_page=100`),
-    // 3. Endpoint de sessão/dados iniciais
-    ()=>fetchJSON(`${PALPITA}/api/v1/session`),
-    ()=>fetchJSON(`${PALPITA}/api/v1/live`),
+// ── BOOKMARKLET ───────────────────────────────────────────────────
+// Este código vai rodar no contexto do palpita.io quando clicado
+function monBuildBookmarklet() {
+  // Construído como string para evitar qualquer problema de escape
+  var parts = [
+    '(function(){',
+    'var CH="sinalpro-rodovia";',
+    'if(window._sp){clearInterval(window._sp);}',
+    'var bc=new BroadcastChannel(CH);',
+    'function scrape(){',
+    '  var d={ts:Date.now()};',
+    // URL -> eventId
+    '  var sm=location.href.match(/rodovia-5-minutos-qu-(\\d+)/);',
+    '  if(sm){d.id=sm[1];d.slug="rodovia-5-minutos-qu-"+sm[1];d.url=location.href;}',
+    // Texto completo da página
+    '  var txt=document.body.innerText||"";',
+    // Contagem: número após "CONTAGEM ATUAL"
+    '  var cm=txt.match(/CONTAGEM[\\s\\S]{0,20}?\\n(\\d{1,4})\\n/i)||txt.match(/^(\\d{1,4})$/m);',
+    '  if(cm)d.count=parseInt(cm[1]);',
+    // Tempo apostas: "01:42" perto de ENCERRAM
+    '  var tm=txt.match(/ENCERRAM[\\s\\S]{0,20}?(\\d{1,2}):(\\d{2})/i);',
+    '  if(tm)d.bet=parseInt(tm[1])*60+parseInt(tm[2]);',
+    '  if(/encerradas/i.test(txt))d.bet=0;',
+    // Thresholds
+    '  var mm=txt.match(/[Mm]ais\\s+de\\s+(\\d+)/);if(mm)d.mais=parseInt(mm[1]);',
+    '  var am=txt.match(/[Aa]t[\\u00e9e]\\s+(\\d+)/);if(am)d.ate=parseInt(am[1]);',
+    // __NEXT_DATA__ JSON (mais preciso)
+    '  var nd=document.getElementById("__NEXT_DATA__");',
+    '  if(nd){try{',
+    '    var j=nd.textContent;',
+    '    var cv=j.match(/"current_value":(\\d+)/);if(cv)d.count=parseInt(cv[1]);',
+    '    var bc2=j.match(/"bet_closes_in":(\\d+)/)||j.match(/"closes_in":(\\d+)/);if(bc2)d.bet=parseInt(bc2[1]);',
+    '    var mo=j.match(/"mais_de":(\\d+)/)||j.match(/"threshold_mais":(\\d+)/);if(mo)d.mais=parseInt(mo[1]);',
+    '    var ao=j.match(/"ate":(\\d+)/)||j.match(/"threshold_ate":(\\d+)/);if(ao)d.ate=parseInt(ao[1]);',
+    '  }catch(e){}}',
+    '  bc.postMessage(d);',
+    // Badge visual
+    '  var fb=document.getElementById("_sp_badge");',
+    '  if(!fb){fb=document.createElement("div");fb.id="_sp_badge";',
+    '  fb.style="position:fixed;bottom:16px;right:16px;background:#7c3aed;color:#fff;padding:8px 16px;border-radius:100px;font-size:12px;font-weight:700;z-index:99999;font-family:monospace;";',
+    '  document.body.appendChild(fb);}',
+    '  fb.textContent="⚡ SinalPRO: "+(d.count!==undefined?d.count+" carros":"lendo...");',
+    '}',
+    'scrape();',
+    'window._sp=setInterval(scrape,2000);',
+    // Toast de confirmação
+    'var t=document.createElement("div");',
+    't.style="position:fixed;top:20px;right:20px;background:#00e676;color:#000;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:700;z-index:99999;";',
+    't.textContent="✅ SinalPRO ativado!";',
+    'document.body.appendChild(t);',
+    'setTimeout(function(){t.remove();},3000);',
+    '})();'
   ];
+  var code = parts.join('');
+  return 'javascript:' + encodeURIComponent(code);
+}
 
-  for(const attempt of attempts){
-    try{
-      const result = await attempt();
-      if(!result) continue;
-      const txt = typeof result==='string' ? result : JSON.stringify(result);
-      // Extrai TODOS os IDs de rodovia e pega o maior (mais recente)
-      const matches=[...txt.matchAll(/rodovia-5-minutos-qu-(\d+)/g)];
-      if(matches.length){
-        const ids=matches.map(m=>parseInt(m[1]));
-        const maxId=Math.max(...ids).toString();
-        const slug=`rodovia-5-minutos-qu-${maxId}`;
-        monSetEvent(maxId, slug);
-        monLog(`🔍 ID detectado automaticamente: ${maxId}`,'var(--green)');
-        return;
-      }
-      monLog(`📄 Resposta sem slug de rodovia (${txt.length} chars): ${txt.slice(0,100)}`,'var(--muted)');
-    }catch(e){
-      monLog(`⚠️ Tentativa falhou: ${e.message}`,'var(--muted)');
-    }
+function monInitBookmarklet() {
+  var a = document.getElementById('monBookmarklet');
+  if (a) {
+    a.href = monBuildBookmarklet();
+    a.setAttribute('draggable', 'true');
   }
-
-  // Falhou tudo — pede ID manual
-  monSt('⚠️','ID não detectado','Digite o ID do evento no campo abaixo e clique "Usar"','var(--gold)');
-  monLog('⚠️ Auto-detecção falhou. Digite o ID manualmente (veja a URL do evento no palpita.io).','var(--gold)');
-  monLog(`💡 Exemplo: na URL app.palpita.io/live/14745-market/rodovia... → ID é 14745`,'var(--accent)');
 }
 
-async function fetchText(url){
-  const r=await fetch(url,{credentials:'include',headers:{'Accept':'text/html','Cache-Control':'no-cache'},cache:'no-store'});
-  return r.ok ? r.text() : null;
-}
-async function fetchJSON(url){
-  const r=await fetch(url,{credentials:'include',headers:{'Accept':'application/json','X-Requested-With':'XMLHttpRequest'},cache:'no-store'});
-  if(!r.ok) return null;
-  const ct=r.headers.get('content-type')||'';
-  if(!ct.includes('json')) return null;
-  return r.json();
+// ── LOG / STATUS ──────────────────────────────────────────────────
+function monLog(msg, c) {
+  c = c || 'var(--muted)';
+  var el = document.getElementById('monLog');
+  if (!el) return;
+  var t = new Date().toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:'America/Sao_Paulo'});
+  var d = document.createElement('div');
+  d.style.color = c;
+  d.textContent = '[' + t + '] ' + msg;
+  el.insertBefore(d, el.firstChild);
+  while (el.children.length > 300) el.removeChild(el.lastChild);
 }
 
-// ── COLETA DADOS DO EVENTO ────────────────────────────────────────
-async function monFetch(){
-  if(!MON.running) return;
-  if(!MON.eventId){
-    // Ainda sem ID — tenta descobrir novamente a cada 5 ciclos
-    if(!MON._discoverCount) MON._discoverCount=0;
-    MON._discoverCount++;
-    if(MON._discoverCount%5===1) monDiscover();
+function monSt(icon, text, sub, c) {
+  c = c || 'var(--muted)';
+  var g = function(id){ return document.getElementById(id); };
+  if (g('monStatusIcon')) g('monStatusIcon').textContent = icon;
+  if (g('monStatusText')) { g('monStatusText').textContent = text; g('monStatusText').style.color = c; }
+  if (g('monStatusSub'))  g('monStatusSub').textContent = sub;
+}
+
+// ── INICIAR ───────────────────────────────────────────────────────
+function monitorStart() {
+  var brt = new Date(new Date().toLocaleString('en-US', {timeZone:'America/Sao_Paulo'}));
+  var hm = brt.getHours()*60 + brt.getMinutes();
+  if (hm < 9*60 || hm > 23*60+30) {
+    showToast('⚠️ Fora do horário (09:00–23:30 BRT)', 'error');
+    monLog('⚠️ Fora do horário', 'var(--red)');
     return;
   }
 
-  const slug=MON.eventSlug;
-  // Endpoints para buscar dados do evento (em ordem de preferência)
-  const endpoints=[
-    // wsm — endpoint visto no DevTools com status 200
-    `${PALPITA}/wsm/${slug}`,
-    `${PALPITA}/wsm/rodovia-5-minutos-qu-${MON.eventId}`,
-    // API REST
-    `${PALPITA}/api/v1/markets/${slug}`,
-    `${PALPITA}/api/v1/markets/rodovia-5-minutos-qu-${MON.eventId}`,
-    `${PALPITA}/api/markets/${slug}`,
-    // Página HTML do evento (fallback final)
-    `${PALPITA}/live/${MON.eventId}-market/${slug}`,
-  ];
+  monitorStop(false);
+  MON.running = true;
+  MON.readings = []; MON.signalFired = false;
+  MON.thresholdMais = null; MON.thresholdAte = null;
+  MON.betClosesSec = null;
+  MON.eventId = ''; MON.eventSlug = ''; MON.currentUrl = '';
 
-  for(const ep of endpoints){
-    try{
-      const r=await fetch(ep,{
-        credentials:'include',
-        headers:{
-          'Accept':'application/json, text/html, */*',
-          'X-Requested-With':'XMLHttpRequest',
-          'Referer':`${PALPITA}/`,
-        },
-        cache:'no-store',
-      });
+  document.getElementById('monStartBtn').style.display = 'none';
+  document.getElementById('monStopBtn').style.display = '';
+  document.getElementById('monLiveTag').style.display = '';
+  document.getElementById('monitorBadge').style.display = '';
+  document.getElementById('monSignalCard').style.display = 'none';
+  var disp = document.getElementById('monUrlDisplay');
+  if (disp) { disp.textContent = 'Aguardando bookmarklet...'; disp.style.color = 'var(--muted)'; }
 
-      if(!r.ok){
-        monLog(`❌ ${ep.split('/').slice(-1)[0]}: HTTP ${r.status}`,'var(--red)');
-        if(r.status===404 && ep.includes('/api/')){
-          monLog(`⚠️ 404 — buscando novo ID...`,'var(--gold)');
-          MON.eventId=''; MON.eventSlug='';
-          monDiscover();
-          return;
-        }
-        continue;
-      }
-
-      const ct=r.headers.get('content-type')||'';
-      let data=null;
-      monLog(`✅ ${ep.split('/').slice(-1)[0]}: HTTP ${r.status} | CT: ${ct.slice(0,40)}`,'var(--green)');
-
-      if(ct.includes('json')){
-        const raw=await r.text();
-        monLog(`📦 JSON raw: ${raw.slice(0,200)}`,'var(--accent3)');
-        try{ data=JSON.parse(raw); }catch(e){ monLog(`❌ JSON parse erro: ${e.message}`,'var(--red)'); continue; }
-      } else {
-        // HTML — extrai dados do texto
-        const html=await r.text();
-        monLog(`📄 HTML (${html.length} chars): ${html.slice(0,150)}`,'var(--muted)');
-        data=monParseHTML(html);
-        if(!data){ monLog(`⚠️ HTML sem dados extraídos`,'var(--gold)'); continue; }
-      }
-
-      MON.consecutiveErrors=0;
-      monProcess(data);
-
-      // Verifica se o ID mudou (novo ciclo)
-      const txt=JSON.stringify(data||'');
-      const newM=txt.match(/rodovia-5-minutos-qu-(\d+)/g);
-      if(newM){
-        const ids=newM.map(m=>parseInt(m.split('-').pop()));
-        const maxId=Math.max(...ids).toString();
-        if(maxId!==MON.eventId){
-          monLog(`🔄 Novo evento detectado: ${maxId} (era ${MON.eventId})`,'var(--accent)');
-          monSetEvent(maxId,`rodovia-5-minutos-qu-${maxId}`);
-          MON.readings=[]; MON.signalFired=false; MON.thresholdMais=null; MON.thresholdAte=null;
-          document.getElementById('monSignalCard').style.display='none';
-        }
-      }
-      return; // sucesso!
-    }catch(e){ monLog(`⚠️ ${ep.split('/').slice(-1)[0]}: ${e.message}`,'var(--muted)'); }
+  // Abre canal de comunicação com o bookmarklet
+  try {
+    MON.bc = new BroadcastChannel('sinalpro-rodovia');
+    MON.bc.onmessage = function(e) {
+      if (MON.running) monReceive(e.data);
+    };
+    monLog('📡 Canal aberto. Agora vá ao palpita.io e clique no favorito ⚡ SinalPRO Monitor', 'var(--accent)');
+    monSt('⏳', 'Aguardando scraping...', 'Clique no favorito na aba do palpita.io', 'var(--gold)');
+  } catch(e) {
+    monLog('❌ BroadcastChannel indisponível: ' + e.message, 'var(--red)');
+    monSt('❌', 'Erro', 'Use Chrome ou Edge', 'var(--red)');
+    return;
   }
 
-  MON.consecutiveErrors++;
-  if(MON.consecutiveErrors>=5){
-    monSt('⚠️','Sem dados','Verifique se o palpita.io está aberto e logado neste browser','var(--gold)');
-  }
-  monLog(`⚠️ Sem resposta (${MON.consecutiveErrors} erros). Próxima tentativa em 3s.`,'var(--gold)');
+  MON.tickTimer = setInterval(monTick, 1000);
+
+  // Aviso se não receber dados em 20s
+  MON._noDataTimer = setTimeout(function() {
+    if (MON.readings.length === 0 && MON.running) {
+      monLog('⚠️ Sem dados em 20s — o bookmarklet foi ativado na aba do palpita.io?', 'var(--gold)');
+    }
+  }, 20000);
 }
 
-// ── PARSEAR HTML ──────────────────────────────────────────────────
-function monParseHTML(html){
-  const data={};
-  // __NEXT_DATA__ JSON embutido
-  const nm=html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
-  if(nm){ try{ const nd=JSON.parse(nm[1]); monDigDeep(nd,data); if(Object.keys(data).length>2) return data; }catch(e){} }
-  // Regex direto
-  const R={
-    current_value: [/current.value[":\s]+(\d+)/i,/[":]count[":\s]+(\d+)/,/[":]value[":\s]+(\d+)/],
-    threshold_mais:[/mais[_.-]de[":\s]+(\d+)/i,/threshold.mais[":\s]+(\d+)/i],
-    threshold_ate: [/[":]at[eé][":\s]+(\d+)/i,/threshold.ate[":\s]+(\d+)/i],
-    bet_closes_in: [/bet.closes.in[":\s]+(\d+)/i,/closes.in[":\s]+(\d+)/],
-    result_in:     [/result.in[":\s]+(\d+)/i,/ends.in[":\s]+(\d+)/],
-  };
-  for(const[k,pats]of Object.entries(R)){
-    for(const p of pats){ const m=html.match(p); if(m){data[k]=Number(m[1]);break;} }
-  }
-  // Texto visível — "Mais de 126" / "Até 126"
-  const mv=html.match(/[Mm]ais\s+de\s+(\d+)/); if(mv) data.threshold_mais=Number(mv[1]);
-  const av=html.match(/[Aa]t[eé]\s+(\d+)/);    if(av) data.threshold_ate =Number(av[1]);
-  // Tempo MM:SS visível
-  const tv=html.match(/(\d{1,2}):(\d{2})/); if(tv&&!data.bet_closes_in) data.bet_closes_in=Number(tv[1])*60+Number(tv[2]);
-  return Object.keys(data).length>1?data:null;
-}
+// ── RECEBER DADOS DO BOOKMARKLET ──────────────────────────────────
+function monReceive(data) {
+  if (!data || !MON.running) return;
 
-// ── EXTRAÇÃO PROFUNDA ─────────────────────────────────────────────
-function monDigDeep(obj,out,d=0){
-  if(!obj||typeof obj!=='object'||d>12)return;
-  const F={
-    current_value: ['current_value','value','count','score','quantity','carros'],
-    threshold_mais:['threshold_mais','mais_de','mais','over','upper'],
-    threshold_ate: ['threshold_ate','ate','under','lower'],
-    bet_closes_in: ['bet_closes_in','closes_in','betting_closes_in','close_in'],
-    result_in:     ['result_in','ends_in','time_remaining','remaining'],
-    options:       ['options','outcomes','selections','choices'],
-  };
-  for(const[k,fs]of Object.entries(F)){
-    for(const f of fs){ if(obj[f]!==undefined&&out[k]===undefined){out[k]=obj[f];} }
-  }
-  for(const v of Object.values(obj)){
-    if(typeof v==='object'&&v!==null)monDigDeep(v,out,d+1);
-  }
-}
-
-// ── PROCESSAR DADOS ───────────────────────────────────────────────
-function monProcess(raw){
-  const data={};
-  if(typeof raw==='object') monDigDeep(raw,data);
-  else if(typeof raw==='string'){
-    // raw pode vir do wsm como texto
-    try{ monDigDeep(JSON.parse(raw),data); }catch(e){ monDigDeep({raw},data); }
+  // Novo evento detectado
+  if (data.id && data.id !== MON.eventId) {
+    var isNew = MON.eventId !== '';
+    MON.eventId   = data.id;
+    MON.eventSlug = data.slug || ('rodovia-5-minutos-qu-' + data.id);
+    MON.currentUrl = data.url || ('https://app.palpita.io/live/' + data.id + '-market/' + MON.eventSlug);
+    var disp = document.getElementById('monUrlDisplay');
+    if (disp) { disp.textContent = MON.currentUrl; disp.style.color = 'var(--green)'; }
+    if (isNew) {
+      monLog('🔄 Novo ciclo: ID ' + data.id, 'var(--accent)');
+      MON.readings = []; MON.signalFired = false;
+      MON.thresholdMais = null; MON.thresholdAte = null;
+      document.getElementById('monSignalCard').style.display = 'none';
+      document.getElementById('monThresholds').style.display = 'none';
+    } else {
+      monLog('✅ Evento conectado: ' + MON.eventSlug, 'var(--green)');
+      if (MON._noDataTimer) { clearTimeout(MON._noDataTimer); MON._noDataTimer = null; }
+    }
   }
 
-  // Thresholds das options
-  const opts=data.options;
-  if(Array.isArray(opts)){
-    opts.forEach(o=>{
-      const l=String(o.label||o.name||o.title||o.description||'');
-      const m=l.match(/(\d+)/); if(!m)return; const n=Number(m[1]);
-      if(/mais/i.test(l)||/over/i.test(l)) MON.thresholdMais=n;
-      if(/at[eé]/i.test(l)||/under/i.test(l)) MON.thresholdAte=n;
-    });
-  }
-  if(data.threshold_mais!=null) MON.thresholdMais=Number(data.threshold_mais);
-  if(data.threshold_ate!=null)  MON.thresholdAte =Number(data.threshold_ate);
-  if(data.bet_closes_in!=null)  MON.betClosesSec =Number(data.bet_closes_in);
-  if(data.result_in!=null)      MON.resultSec    =Number(data.result_in);
+  // Thresholds e tempo
+  if (data.mais != null) MON.thresholdMais = Number(data.mais);
+  if (data.ate  != null) MON.thresholdAte  = Number(data.ate);
+  if (data.bet  != null) MON.betClosesSec  = Number(data.bet);
 
-  const count=data.current_value!=null?Number(data.current_value):null;
-  if(count!==null&&!isNaN(count)&&count>=0&&count<10000){
-    MON.lastCount=count;
-    MON.readings.push({ts:Date.now(),count});
-    if(MON.readings.length>80) MON.readings=MON.readings.slice(-80);
+  // Contagem
+  var count = data.count != null ? Number(data.count) : null;
+  if (count !== null && !isNaN(count) && count >= 0 && count < 10000) {
+    MON.readings.push({ts: Date.now(), count: count});
+    if (MON.readings.length > 80) MON.readings = MON.readings.slice(-80);
     monUpdateUI(count);
     monUpdateThr();
-    const proj=monProj();
-    if(proj!==null) monUpdateBar(proj);
-    monLog(`🚗 ${count} carros | Apostas: ${MON.betClosesSec??'?'}s | Proj: ${proj!=null?Math.round(proj):'?'} | #${MON.readings.length}`,'var(--text)');
+    var proj = monProj();
+    if (proj !== null) monUpdateBar(proj);
+    monLog(
+      '🚗 ' + count + ' carros' +
+      ' | Apostas: ' + (MON.betClosesSec != null ? MON.betClosesSec : '?') + 's' +
+      ' | Proj: ' + (proj != null ? Math.round(proj) : '?') +
+      ' | #' + MON.readings.length,
+      'var(--text)'
+    );
     monCheckTrigger();
-    monSt('📡','Monitorando ao vivo',`Leituras: ${MON.readings.length} | Evento: ${MON.eventId}`,'var(--green)');
-  } else if(MON.thresholdMais||MON.thresholdAte){
+    monSt('📡', 'Monitorando ao vivo', MON.readings.length + ' leituras | ID: ' + MON.eventId, 'var(--green)');
+  } else if (MON.thresholdMais || MON.thresholdAte) {
     monUpdateThr();
-    monLog(`📊 Thresholds: +${MON.thresholdMais} / -${MON.thresholdAte} | Apostas: ${MON.betClosesSec??'?'}s`,'var(--muted)');
-    monSt('📊','Recebendo dados...','Aguardando contagem de carros','var(--accent)');
   }
 }
 
 // ── TICK ──────────────────────────────────────────────────────────
-function monTick(){
-  if(!MON.running)return;
-  if(MON.betClosesSec!==null&&MON.betClosesSec>0) MON.betClosesSec--;
-  if(MON.resultSec!==null&&MON.resultSec>0) MON.resultSec--;
-  const bt=document.getElementById('monBetTime');
-  if(bt&&MON.betClosesSec!==null){
-    bt.textContent=MON.betClosesSec;
-    bt.style.color=MON.betClosesSec<=30?'var(--red)':MON.betClosesSec<=60?'var(--gold)':'var(--accent3)';
+function monTick() {
+  if (!MON.running) return;
+  if (MON.betClosesSec !== null && MON.betClosesSec > 0) MON.betClosesSec--;
+  var bt = document.getElementById('monBetTime');
+  if (bt && MON.betClosesSec !== null) {
+    bt.textContent = MON.betClosesSec;
+    bt.style.color = MON.betClosesSec <= 30 ? 'var(--red)' : MON.betClosesSec <= 60 ? 'var(--gold)' : 'var(--accent3)';
   }
-  // Fim de ciclo
-  if(MON.resultSec===0){
-    monLog('🔄 Ciclo encerrado. Buscando novo evento...','var(--accent)');
-    MON.eventId=''; MON.eventSlug=''; MON.readings=[]; MON.signalFired=false;
-    MON.betClosesSec=null; MON.resultSec=null; MON.thresholdMais=null; MON.thresholdAte=null;
-    document.getElementById('monThresholds').style.display='none';
-    document.getElementById('monSignalCard').style.display='none';
-    const d=document.getElementById('monUrlDisplay');
-    if(d){d.textContent='Detectando novo ciclo...';d.style.color='var(--muted)';}
-    setTimeout(()=>{ if(MON.running) monDiscover(); },3000);
-  }
-  if(MON.readings.length>=2) monCheckTrigger();
+  if (MON.readings.length >= 2) monCheckTrigger();
 }
 
 // ── UI ────────────────────────────────────────────────────────────
-function monUpdateUI(count){
-  const cc=document.getElementById('monCurrentCount');
-  if(cc){cc.textContent=count;cc.style.color=monCC(count);}
-  const rc=document.getElementById('monReadings');
-  if(rc) rc.textContent=MON.readings.length;
-  const proj=monProj();
-  if(proj!==null){
-    const pe=document.getElementById('monProjected');
-    if(pe){pe.textContent=Math.round(proj);pe.style.color=monCC(Math.round(proj));}
+function monUpdateUI(count) {
+  var cc = document.getElementById('monCurrentCount');
+  if (cc) { cc.textContent = count; cc.style.color = monCC(count); }
+  var rc = document.getElementById('monReadings');
+  if (rc) rc.textContent = MON.readings.length;
+  var proj = monProj();
+  if (proj !== null) {
+    var pe = document.getElementById('monProjected');
+    if (pe) { pe.textContent = Math.round(proj); pe.style.color = monCC(Math.round(proj)); }
   }
 }
-function monCC(n){
-  if(MON.thresholdMais!==null&&n>MON.thresholdMais)return'var(--green)';
-  if(MON.thresholdAte!==null&&n<=MON.thresholdAte) return'var(--red)';
-  return'var(--gold)';
+
+function monCC(n) {
+  if (MON.thresholdMais !== null && n > MON.thresholdMais) return 'var(--green)';
+  if (MON.thresholdAte  !== null && n <= MON.thresholdAte)  return 'var(--red)';
+  return 'var(--gold)';
 }
-function monUpdateThr(){
-  const el=document.getElementById('monThresholds'); if(!el)return;
-  if(MON.thresholdMais!==null||MON.thresholdAte!==null){
-    el.style.display='';
-    const s=id=>document.getElementById(id);
-    if(MON.thresholdMais!=null){if(s('monThresholdMais'))s('monThresholdMais').textContent=MON.thresholdMais;if(s('monBarMais'))s('monBarMais').textContent=MON.thresholdMais;}
-    if(MON.thresholdAte!=null){if(s('monThresholdAte'))s('monThresholdAte').textContent=MON.thresholdAte;if(s('monBarAte'))s('monBarAte').textContent=MON.thresholdAte;}
+
+function monUpdateThr() {
+  var el = document.getElementById('monThresholds');
+  if (!el) return;
+  if (MON.thresholdMais !== null || MON.thresholdAte !== null) {
+    el.style.display = '';
+    var s = function(id){ return document.getElementById(id); };
+    if (MON.thresholdMais !== null) {
+      if (s('monThresholdMais')) s('monThresholdMais').textContent = MON.thresholdMais;
+      if (s('monBarMais'))       s('monBarMais').textContent = MON.thresholdMais;
+    }
+    if (MON.thresholdAte !== null) {
+      if (s('monThresholdAte')) s('monThresholdAte').textContent = MON.thresholdAte;
+      if (s('monBarAte'))       s('monBarAte').textContent = MON.thresholdAte;
+    }
   }
 }
 
 // ── REGRESSÃO LINEAR ──────────────────────────────────────────────
-function monProj(){
-  if(MON.readings.length<2)return MON.readings.length===1?MON.readings[0].count:null;
-  const r=MON.readings.slice(-20),n=r.length,now=Date.now();
-  const pts=r.map(x=>({x:(x.ts-now)/1000,y:x.count}));
-  const xM=pts.reduce((a,p)=>a+p.x,0)/n, yM=pts.reduce((a,p)=>a+p.y,0)/n;
-  const num=pts.reduce((a,p)=>a+(p.x-xM)*(p.y-yM),0), den=pts.reduce((a,p)=>a+(p.x-xM)**2,0);
-  if(den===0)return yM;
-  return Math.max(0,(yM-num/den*xM)+num/den*(MON.resultSec??60));
+function monProj() {
+  if (MON.readings.length < 2) return MON.readings.length === 1 ? MON.readings[0].count : null;
+  var r = MON.readings.slice(-20), n = r.length, now = Date.now();
+  var pts = r.map(function(x){ return {x:(x.ts-now)/1000, y:x.count}; });
+  var xM = pts.reduce(function(a,p){return a+p.x;},0)/n;
+  var yM = pts.reduce(function(a,p){return a+p.y;},0)/n;
+  var num = pts.reduce(function(a,p){return a+(p.x-xM)*(p.y-yM);},0);
+  var den = pts.reduce(function(a,p){return a+(p.x-xM)*(p.x-xM);},0);
+  if (den === 0) return yM;
+  var slope = num/den, intercept = yM - slope*xM;
+  return Math.max(0, intercept + slope*(MON.betClosesSec != null ? MON.betClosesSec : 60));
 }
 
 // ── BARRA ─────────────────────────────────────────────────────────
-function monUpdateBar(v){
-  const bar=document.getElementById('monProgressBar'),lbl=document.getElementById('monPredLabel'),conf=document.getElementById('monConfLabel');
-  if(!bar||!lbl)return;
-  if(MON.thresholdMais===null||MON.thresholdAte===null){lbl.textContent='Aguardando limites...';return;}
-  const mid=(MON.thresholdMais+MON.thresholdAte)/2,range=Math.max(MON.thresholdMais-MON.thresholdAte,1);
-  const pct=Math.max(5,Math.min(95,((v-MON.thresholdAte+range)/(range*2))*100));
-  bar.style.width=pct+'%';
-  const{result,confidence,color}=monSig(v);
-  bar.style.background=result==='MAIS DE'?'linear-gradient(90deg,#00aa44,var(--green))':'linear-gradient(90deg,var(--red),#880000)';
-  if(result){const t=result==='MAIS DE'?MON.thresholdMais:MON.thresholdAte;lbl.textContent=`→ ${result} ${t} CARROS`;lbl.style.color=color;if(conf)conf.textContent=`Confiança: ${confidence}% | Projeção: ${Math.round(v)} carros`;}
+function monUpdateBar(v) {
+  var bar  = document.getElementById('monProgressBar');
+  var lbl  = document.getElementById('monPredLabel');
+  var conf = document.getElementById('monConfLabel');
+  if (!bar || !lbl) return;
+  if (MON.thresholdMais === null || MON.thresholdAte === null) {
+    lbl.textContent = 'Aguardando limites...'; return;
+  }
+  var range = Math.max(MON.thresholdMais - MON.thresholdAte, 1);
+  var pct = Math.max(5, Math.min(95, ((v - MON.thresholdAte + range) / (range*2)) * 100));
+  bar.style.width = pct + '%';
+  var sig = monSig(v);
+  bar.style.background = sig.result === 'MAIS DE'
+    ? 'linear-gradient(90deg,#00aa44,var(--green))'
+    : 'linear-gradient(90deg,var(--red),#880000)';
+  if (sig.result) {
+    var t = sig.result === 'MAIS DE' ? MON.thresholdMais : MON.thresholdAte;
+    lbl.textContent = '→ ' + sig.result + ' ' + t + ' CARROS';
+    lbl.style.color = sig.color;
+    if (conf) conf.textContent = 'Confiança: ' + sig.confidence + '% | Projeção: ' + Math.round(v) + ' carros';
+  }
 }
-function monSig(v){
-  if(MON.thresholdMais===null||MON.thresholdAte===null)return{result:null,confidence:0,color:'var(--muted)'};
-  const mid=(MON.thresholdMais+MON.thresholdAte)/2,range=Math.max(MON.thresholdMais-MON.thresholdAte,1);
-  const dist=Math.abs(v-mid),confidence=Math.min(99,Math.round(50+(dist/(range*3))*49));
-  return v>mid?{result:'MAIS DE',confidence,color:'var(--green)'}:{result:'ATÉ',confidence,color:'var(--red)'};
+
+function monSig(v) {
+  if (MON.thresholdMais === null || MON.thresholdAte === null)
+    return {result:null, confidence:0, color:'var(--muted)'};
+  var mid = (MON.thresholdMais + MON.thresholdAte) / 2;
+  var range = Math.max(MON.thresholdMais - MON.thresholdAte, 1);
+  var dist = Math.abs(v - mid);
+  var confidence = Math.min(99, Math.round(50 + (dist/(range*3))*49));
+  return v > mid
+    ? {result:'MAIS DE', confidence:confidence, color:'var(--green)'}
+    : {result:'ATÉ',     confidence:confidence, color:'var(--red)'};
 }
 
 // ── DISPARO ───────────────────────────────────────────────────────
-function monCheckTrigger(){
-  if(MON.signalFired)return;
-  const minR=parseInt(document.getElementById('monMinReadings').value)||5;
-  const trigSec=parseInt(document.getElementById('monTriggerSec').value)||30;
-  if(MON.readings.length<minR)return;
-  if(MON.betClosesSec===null||MON.betClosesSec>trigSec)return;
+function monCheckTrigger() {
+  if (MON.signalFired) return;
+  var minR    = parseInt(document.getElementById('monMinReadings').value) || 5;
+  var trigSec = parseInt(document.getElementById('monTriggerSec').value)  || 30;
+  if (MON.readings.length < minR) return;
+  if (MON.betClosesSec === null || MON.betClosesSec > trigSec) return;
   monFireSignal();
 }
 
-async function monFireSignal(){
-  MON.signalFired=true;
-  const proj=monProj(); if(proj===null){monLog('⚠️ Sem projeção.','var(--gold)');return;}
-  const{result,confidence,color}=monSig(proj); if(!result){monLog('⚠️ Thresholds não detectados.','var(--gold)');return;}
-  const thr=result==='MAIS DE'?MON.thresholdMais:MON.thresholdAte;
-  const lbl=`${result} ${thr} CARROS`;
-  const url=MON.currentUrl;
-  const brt=new Date(new Date().toLocaleString('en-US',{timeZone:'America/Sao_Paulo'}));
-  const ts=brt.toLocaleString('pt-BR');
-  const titulo=result==='MAIS DE'?'🔥 SINAL FORTE':'💎 ENTRADA PREMIUM';
-  const S='━━━━━━━━━━━━━━━━━━━━';
-  MON.signalMD=`**${titulo} — 🚗 Rodovia — 5 minutos**\n${S}\n__🎯 Resultado:__ **${lbl}**\n__🚗 Projeção:__ **${Math.round(proj)} carros**\n__📊 Confiança:__ **${confidence}%**\n__🕒 Horário:__ ${ts} BRT\n${S}\n${CFG.showEntrada?'⚡ **Entrada válida AGORA**\n':''}${CFG.showRisk?'⚠️ __Palpites envolvem risco.__\n':''}\n👉 **LINK DO EVENTO:**\n${url}${CFG.footer?'\n\n'+CFG.footer:''}`;
-  const eH=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  MON.signalBot=`<b>${titulo} — 🚗 Rodovia — 5 minutos</b>\n${S}\n<u>🎯 Resultado:</u> <b>${lbl}</b>\n<u>🚗 Projeção:</u> <b>${Math.round(proj)} carros</b>\n<u>📊 Confiança:</u> <b>${confidence}%</b>\n<u>🕒 Horário:</u> ${ts} BRT\n${S}\n${CFG.showEntrada?'⚡ <b>Entrada válida AGORA</b>\n':''}${CFG.showRisk?'⚠️ <i>Palpites envolvem risco.</i>\n':''}\n👉 <b>LINK DO EVENTO:</b>\n${eH(url)}${CFG.footer?'\n\n'+eH(CFG.footer):''}`;
-  const sc=document.getElementById('monSignalCard');if(sc)sc.style.display='';
-  const sr=document.getElementById('monSignalResult');if(sr){sr.textContent=lbl;sr.style.color=color;}
-  const sv=document.getElementById('monSignalConf');if(sv)sv.textContent=`Confiança: ${confidence}% | Projeção: ${Math.round(proj)} carros`;
-  monLog(`🚨 SINAL: ${lbl} (${confidence}%)`,color);
-  showToast(`🚨 ${lbl}!`);
-  try{
-    const{db,collection,addDoc,serverTimestamp}=await fb();
-    await addDoc(collection(db,`usuarios/${uid()}/historico`),{ev:'rodovia',label:'🚗 Rodovia — Auto',resultado:lbl,conf:String(confidence),tg:MON.signalMD,timeStr:ts,ts:serverTimestamp()});
-    monLog('✅ Salvo no histórico.','var(--green)');
-  }catch(e){monLog('⚠️ Histórico: '+e.message,'var(--gold)');}
-  if(document.getElementById('monAutoSend').checked) await monSendSignal();
-  setTimeout(()=>{
-    MON.signalFired=false; MON.readings=[];
-    const sc=document.getElementById('monSignalCard');if(sc)sc.style.display='none';
-    monLog('🔄 Resetado para próximo ciclo.','var(--muted)');
-  },120000);
+async function monFireSignal() {
+  MON.signalFired = true;
+  var proj = monProj();
+  if (proj === null) { monLog('⚠️ Sem projeção.', 'var(--gold)'); return; }
+  var sig = monSig(proj);
+  if (!sig.result) { monLog('⚠️ Thresholds não detectados.', 'var(--gold)'); return; }
+
+  var thr    = sig.result === 'MAIS DE' ? MON.thresholdMais : MON.thresholdAte;
+  var lbl    = sig.result + ' ' + thr + ' CARROS';
+  var url    = MON.currentUrl;
+  var brt    = new Date(new Date().toLocaleString('en-US',{timeZone:'America/Sao_Paulo'}));
+  var ts     = brt.toLocaleString('pt-BR');
+  var titulo = sig.result === 'MAIS DE' ? '🔥 SINAL FORTE' : '💎 ENTRADA PREMIUM';
+  var S      = '━━━━━━━━━━━━━━━━━━━━';
+  var proj_r = Math.round(proj);
+
+  MON.signalMD =
+    '**' + titulo + ' — 🚗 Rodovia — 5 minutos**\n' + S + '\n' +
+    '__🎯 Resultado:__ **' + lbl + '**\n' +
+    '__🚗 Projeção:__ **' + proj_r + ' carros**\n' +
+    '__📊 Confiança:__ **' + sig.confidence + '%**\n' +
+    '__🕒 Horário:__ ' + ts + ' BRT\n' + S + '\n' +
+    (CFG.showEntrada ? '⚡ **Entrada válida AGORA**\n' : '') +
+    (CFG.showRisk    ? '⚠️ __Palpites envolvem risco.__\n' : '') +
+    '\n👉 **LINK DO EVENTO:**\n' + url +
+    (CFG.footer ? '\n\n' + CFG.footer : '');
+
+  var eH = function(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+
+  MON.signalBot =
+    '<b>' + titulo + ' — 🚗 Rodovia — 5 minutos</b>\n' + S + '\n' +
+    '<u>🎯 Resultado:</u> <b>' + lbl + '</b>\n' +
+    '<u>🚗 Projeção:</u> <b>' + proj_r + ' carros</b>\n' +
+    '<u>📊 Confiança:</u> <b>' + sig.confidence + '%</b>\n' +
+    '<u>🕒 Horário:</u> ' + ts + ' BRT\n' + S + '\n' +
+    (CFG.showEntrada ? '⚡ <b>Entrada válida AGORA</b>\n' : '') +
+    (CFG.showRisk    ? '⚠️ <i>Palpites envolvem risco.</i>\n' : '') +
+    '\n👉 <b>LINK DO EVENTO:</b>\n' + eH(url) +
+    (CFG.footer ? '\n\n' + eH(CFG.footer) : '');
+
+  var sc = document.getElementById('monSignalCard');    if (sc) sc.style.display = '';
+  var sr = document.getElementById('monSignalResult');  if (sr) { sr.textContent = lbl; sr.style.color = sig.color; }
+  var sv = document.getElementById('monSignalConf');    if (sv) sv.textContent = 'Confiança: ' + sig.confidence + '% | Projeção: ' + proj_r + ' carros';
+
+  monLog('🚨 SINAL: ' + lbl + ' (' + sig.confidence + '%)', sig.color);
+  showToast('🚨 ' + lbl + '!');
+
+  try {
+    var fb = await fb_ref();
+    await fb.addDoc(fb.collection(fb.db, 'usuarios/' + uid() + '/historico'), {
+      ev:'rodovia', label:'🚗 Rodovia — Auto', resultado:lbl,
+      conf:String(sig.confidence), tg:MON.signalMD, timeStr:ts, ts:fb.serverTimestamp()
+    });
+    monLog('✅ Salvo no histórico.', 'var(--green)');
+  } catch(e) { monLog('⚠️ Histórico: ' + e.message, 'var(--gold)'); }
+
+  if (document.getElementById('monAutoSend').checked) await monSendNow();
+
+  setTimeout(function() {
+    MON.signalFired = false; MON.readings = [];
+    var sc = document.getElementById('monSignalCard'); if (sc) sc.style.display = 'none';
+    monLog('🔄 Resetado para próximo ciclo.', 'var(--muted)');
+  }, 120000);
 }
 
-async function monSendSignal(){
-  if(!MON.signalBot){showToast('⚠️ Sem sinal.','error');return;}
-  const cfg=getBotCfg(),token=cfg.token,chs=(cfg.channels||[]).filter(c=>c.active!==false);
-  if(!token){showToast('⚠️ Configure o BOT TOKEN.','error');return;}
-  if(!chs.length){showToast('⚠️ Adicione um canal.','error');return;}
-  let ok=0,fail=0;
-  for(const ch of chs){try{const r=await tgSend(token,ch.id,MON.signalBot);if(r.ok)ok++;else fail++;}catch(e){fail++;}}
-  monLog(ok>0?`✅ Enviado para ${ok} canal(is)!`:'❌ Falha.',ok>0?'var(--green)':'var(--red)');
-  if(ok>0)showToast(`✅ Enviado para ${ok} canal(is)!`);
-}
-async function monSendNow(){ await monSendSignal(); }
-function monCopySignal(){
-  if(!MON.signalMD){showToast('⚠️ Sem sinal.','error');return;}
-  navigator.clipboard.writeText(MON.signalMD).then(()=>showToast('✅ Copiado!')).catch(()=>{const t=document.getElementById('_clipHelper');t.value=MON.signalMD;t.select();document.execCommand('copy');showToast('✅ Copiado!');});
+async function fb_ref() {
+  var r = await fb();
+  return r;
 }
 
-function monitorStop(showUI=true){
-  MON.running=false;
-  if(MON.timer){clearInterval(MON.timer);MON.timer=null;}
-  if(MON.tickTimer){clearInterval(MON.tickTimer);MON.tickTimer=null;}
-  if(showUI){
-    document.getElementById('monStartBtn').style.display='';
-    document.getElementById('monStopBtn').style.display='none';
-    document.getElementById('monLiveTag').style.display='none';
-    document.getElementById('monitorBadge').style.display='none';
-    monSt('⏸️','Monitor parado','Clique em Iniciar para retomar','var(--muted)');
-    monLog('■ Monitor parado.','var(--muted)');
+async function monSendNow() {
+  if (!MON.signalBot) { showToast('⚠️ Sem sinal.', 'error'); return; }
+  var cfg = getBotCfg(), token = cfg.token;
+  var chs = (cfg.channels || []).filter(function(c){ return c.active !== false; });
+  if (!token)    { showToast('⚠️ Configure o BOT TOKEN.', 'error'); return; }
+  if (!chs.length){ showToast('⚠️ Adicione um canal.', 'error'); return; }
+  var ok = 0, fail = 0;
+  for (var i = 0; i < chs.length; i++) {
+    try { var r = await tgSend(token, chs[i].id, MON.signalBot); if (r.ok) ok++; else fail++; }
+    catch(e) { fail++; }
+  }
+  monLog(ok > 0 ? '✅ Enviado para ' + ok + ' canal(is)!' : '❌ Falha.', ok > 0 ? 'var(--green)' : 'var(--red)');
+  if (ok > 0) showToast('✅ Enviado para ' + ok + ' canal(is)!');
+}
+
+function monCopySignal() {
+  if (!MON.signalMD) { showToast('⚠️ Sem sinal.', 'error'); return; }
+  navigator.clipboard.writeText(MON.signalMD)
+    .then(function(){ showToast('✅ Copiado!'); })
+    .catch(function(){
+      var t = document.getElementById('_clipHelper');
+      t.value = MON.signalMD; t.select(); document.execCommand('copy');
+      showToast('✅ Copiado!');
+    });
+}
+
+function monitorStop(showUI) {
+  if (showUI === undefined) showUI = true;
+  MON.running = false;
+  if (MON.bc)          { try { MON.bc.close(); } catch(e){} MON.bc = null; }
+  if (MON.tickTimer)   { clearInterval(MON.tickTimer);  MON.tickTimer = null; }
+  if (MON._noDataTimer){ clearTimeout(MON._noDataTimer); MON._noDataTimer = null; }
+  if (showUI) {
+    document.getElementById('monStartBtn').style.display = '';
+    document.getElementById('monStopBtn').style.display = 'none';
+    document.getElementById('monLiveTag').style.display = 'none';
+    document.getElementById('monitorBadge').style.display = 'none';
+    monSt('⏸️', 'Monitor parado', 'Clique em Iniciar para retomar', 'var(--muted)');
+    monLog('■ Monitor parado.', 'var(--muted)');
   }
 }
+
+// Inicializa bookmarklet após DOM pronto
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', monInitBookmarklet);
+} else {
+  monInitBookmarklet();
+}
+
 </script>
 
 </body>
