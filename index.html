@@ -272,6 +272,7 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
 <!-- TABS -->
 <nav class="tabs-nav">
   <button class="tab-btn active" id="tab-gerador" onclick="switchTab('gerador',this)">⚡ <span class="tab-label">Gerador</span></button>
+  <button class="tab-btn" id="tab-eventos" onclick="switchTab('eventos',this)">🎯 <span class="tab-label">Eventos</span> <span class="tab-badge" id="eventosBadge" style="background:rgba(0,230,118,.3);">0</span></button>
   <button class="tab-btn" id="tab-historico" onclick="switchTab('historico',this)">🕒 <span class="tab-label">Histórico</span> <span class="tab-badge" id="histBadge">0</span></button>
   <button class="tab-btn" id="tab-templates" onclick="switchTab('templates',this)">📋 <span class="tab-label">Templates</span> <span class="tab-badge" id="tplBadge">0</span></button>
   <button class="tab-btn" id="tab-bot" onclick="switchTab('bot',this)">🤖 <span class="tab-label">Bot</span></button>
@@ -468,12 +469,74 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
 
 
 
+<!-- EVENTOS -->
+<div class="page" id="page-eventos">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
+    <div>
+      <h2 style="font-size:18px;font-weight:800;">🎯 Eventos Ativos</h2>
+      <p style="font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-top:4px;" id="evLastUpdate">Atualiza a cada 10 segundos via API Palpita.io</p>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <div id="evApiStatus" style="display:flex;align-items:center;gap:6px;font-size:11px;font-family:var(--font-mono);color:var(--muted);background:var(--card);border:1px solid var(--border);padding:5px 12px;border-radius:100px;">
+        <div id="evDot" style="width:7px;height:7px;border-radius:50%;background:var(--muted);"></div>
+        <span id="evStatusLabel">Conectando...</span>
+      </div>
+      <input type="text" id="evSearch" placeholder="🔍 Filtrar eventos..." oninput="evRender()" style="background:var(--bg);border:1px solid var(--border);border-radius:100px;color:var(--text);font-family:var(--font-head);font-size:12px;padding:6px 14px;outline:none;width:180px;">
+      <select id="evCatFilter" onchange="evRender()" style="background:var(--bg);border:1px solid var(--border);border-radius:100px;color:var(--text);font-family:var(--font-mono);font-size:11px;padding:6px 12px;outline:none;">
+        <option value="">Todas categorias</option>
+      </select>
+      <button onclick="evFetch(true)" style="padding:6px 16px;border-radius:100px;border:1px solid var(--accent);background:rgba(0,212,255,.08);color:var(--accent);font-family:var(--font-mono);font-size:11px;font-weight:700;cursor:pointer;">↺ Atualizar</button>
+    </div>
+  </div>
+
+  <!-- Stats row -->
+  <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 20px;flex:1;min-width:110px;text-align:center;">
+      <div style="font-size:10px;color:var(--muted);font-family:var(--font-mono);letter-spacing:1px;text-transform:uppercase;">Abertos</div>
+      <div id="evCountOpen" style="font-size:24px;font-weight:900;color:var(--green);">—</div>
+    </div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 20px;flex:1;min-width:110px;text-align:center;">
+      <div style="font-size:10px;color:var(--muted);font-family:var(--font-mono);letter-spacing:1px;text-transform:uppercase;">Categorias</div>
+      <div id="evCountCats" style="font-size:24px;font-weight:900;color:var(--accent);">—</div>
+    </div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 20px;flex:1;min-width:110px;text-align:center;">
+      <div style="font-size:10px;color:var(--muted);font-family:var(--font-mono);letter-spacing:1px;text-transform:uppercase;">Próximo a fechar</div>
+      <div id="evNextClose" style="font-size:13px;font-weight:800;color:var(--gold);">—</div>
+    </div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 20px;flex:1;min-width:110px;text-align:center;">
+      <div style="font-size:10px;color:var(--muted);font-family:var(--font-mono);letter-spacing:1px;text-transform:uppercase;">Proxy ativo</div>
+      <div id="evProxyLabel" style="font-size:13px;font-weight:800;color:var(--accent3);">—</div>
+    </div>
+  </div>
+
+  <!-- Events grid -->
+  <div id="evGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;">
+    <div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--muted);font-family:var(--font-mono);font-size:13px;">
+      ⏳ Carregando eventos...
+    </div>
+  </div>
+
+  <!-- Orderbook Modal -->
+  <div id="evObModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(4px);z-index:2000;align-items:center;justify-content:center;padding:20px;">
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:20px;padding:28px;max-width:600px;width:100%;max-height:90vh;overflow-y:auto;position:relative;">
+      <button onclick="evCloseOb()" style="position:absolute;top:16px;right:16px;background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;">✕</button>
+      <div id="evObTitle" style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:4px;padding-right:30px;"></div>
+      <div id="evObMeta" style="font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-bottom:18px;"></div>
+      <div id="evObContent">Carregando orderbook...</div>
+      <div style="margin-top:18px;display:flex;gap:8px;flex-wrap:wrap;">
+        <button id="evObMonBtn" onclick="evSendToMonitor()" style="flex:1;padding:12px;border-radius:10px;background:linear-gradient(135deg,var(--accent3),var(--accent));color:#fff;border:none;font-family:var(--font-head);font-size:13px;font-weight:800;cursor:pointer;">🚗 Monitorar este Evento</button>
+        <button onclick="evCloseOb()" style="padding:12px 20px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:var(--font-head);font-size:12px;cursor:pointer;">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- MONITOR AUTO - RODOVIA -->
 <div class="page" id="page-monitor">
   <div style="margin:4px 0 20px;display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;">
     <div>
-      <h2 style="font-size:18px;font-weight:800;">🚗 Monitor Automático — Rodovia</h2>
-      <p style="font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-top:4px;" id="monSubtitle">API Palpita.io + Bookmarklet — dados em tempo real</p>
+      <h2 style="font-size:18px;font-weight:800;">🚗 Monitor Automático</h2>
+      <p style="font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-top:4px;">Polling via API Palpita.io — selecione um evento na aba 🎯 Eventos</p>
     </div>
     <div style="display:flex;gap:8px;align-items:center;">
       <div id="monLiveTag" style="display:none;background:rgba(255,61,90,.15);border:1px solid rgba(255,61,90,.4);color:var(--red);padding:5px 14px;border-radius:100px;font-size:11px;font-family:var(--font-mono);font-weight:700;animation:pulse 1s infinite;">● AO VIVO</div>
@@ -482,92 +545,17 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
     </div>
   </div>
 
-  <!-- MODO SELECTOR -->
-  <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 20px;margin-bottom:20px;">
-    <div style="font-size:10px;font-family:var(--font-mono);letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:14px;">🔌 Modo de Monitoramento</div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;">
-      <button id="modeApiBtn" onclick="setMonMode('api')" style="flex:1;min-width:160px;padding:14px 16px;border-radius:12px;border:2px solid var(--accent);background:rgba(0,212,255,.1);color:var(--accent);font-family:var(--font-head);font-size:13px;font-weight:800;cursor:pointer;transition:all .2s;">
-        🌐 Modo API <span style="display:block;font-size:10px;font-family:var(--font-mono);font-weight:400;color:var(--muted);margin-top:3px;">Direto via API Palpita.io</span>
-      </button>
-      <button id="modeBmkBtn" onclick="setMonMode('bookmarklet')" style="flex:1;min-width:160px;padding:14px 16px;border-radius:12px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:var(--font-head);font-size:13px;font-weight:800;cursor:pointer;transition:all .2s;">
-        📎 Modo Bookmarklet <span style="display:block;font-size:10px;font-family:var(--font-mono);font-weight:400;margin-top:3px;">Scraping via favorito</span>
-      </button>
-    </div>
-  </div>
-
-  <!-- MODO API PANEL -->
-  <div id="panelApi" style="margin-bottom:20px;">
-    <div style="background:linear-gradient(135deg,rgba(0,212,255,.1),rgba(124,58,237,.08));border:1px solid rgba(0,212,255,.3);border-radius:16px;padding:22px 24px;margin-bottom:20px;">
-      <div style="font-size:14px;font-weight:800;color:var(--accent);margin-bottom:12px;">🌐 Integração via API Oficial Palpita.io</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
-        <div class="field" style="margin:0;">
-          <label>API Key (pk_...)</label>
-          <input type="text" id="apiKeyInput" class="cfg-input" placeholder="pk_xxxxxxxxxxxxxxxx" style="font-family:var(--font-mono);font-size:12px;">
-        </div>
-        <div class="field" style="margin:0;">
-          <label>API Secret (sk_...)</label>
-          <input type="password" id="apiSecretInput" class="cfg-input" placeholder="sk_xxxxxxxxxxxxxxxx" style="font-family:var(--font-mono);font-size:12px;">
-        </div>
-      </div>
-      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
-        <div class="field" style="margin:0;flex:1;min-width:200px;">
-          <label>Buscar Evento Rodovia</label>
-          <input type="text" id="apiSearchInput" class="cfg-input" placeholder="Ex: rodovia, 5 minutos..." style="font-family:var(--font-mono);font-size:12px;" oninput="apiSearchDebounce()">
-        </div>
-        <button onclick="apiFetchMarkets()" style="padding:10px 18px;border-radius:10px;border:1px solid var(--accent);background:rgba(0,212,255,.1);color:var(--accent);font-family:var(--font-head);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">🔍 Buscar</button>
-      </div>
-      <!-- Market results -->
-      <div id="apiMarketList" style="margin-top:12px;max-height:180px;overflow-y:auto;display:none;">
-        <div style="font-size:10px;font-family:var(--font-mono);color:var(--muted);margin-bottom:8px;letter-spacing:1px;">EVENTOS ABERTOS — clique para selecionar</div>
-        <div id="apiMarketItems"></div>
-      </div>
-      <!-- Selected market -->
-      <div id="apiSelectedMarket" style="display:none;margin-top:12px;background:rgba(0,230,118,.07);border:1px solid rgba(0,230,118,.25);border-radius:10px;padding:12px 14px;">
-        <div style="font-size:10px;font-weight:700;color:var(--green);margin-bottom:4px;">✅ EVENTO SELECIONADO</div>
-        <div id="apiMarketTitle" style="font-size:13px;font-weight:800;color:var(--text);"></div>
-        <div id="apiMarketMeta" style="font-size:10px;font-family:var(--font-mono);color:var(--muted);margin-top:3px;"></div>
-        <div id="apiSelectionsWrap" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;"></div>
-      </div>
-      <div id="apiStatusMsg" style="margin-top:10px;font-size:11px;font-family:var(--font-mono);color:var(--muted);"></div>
-      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
-        <button onclick="apiTestConnection()" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:var(--font-mono);font-size:11px;font-weight:700;cursor:pointer;">🔌 Testar Conexão</button>
-        <button onclick="apiFetchMarkets()" style="padding:8px 14px;border-radius:8px;border:1px solid var(--accent);background:rgba(0,212,255,.08);color:var(--accent);font-family:var(--font-mono);font-size:11px;font-weight:700;cursor:pointer;">🔄 Recarregar Eventos</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODO BOOKMARKLET PANEL -->
-  <div id="panelBmk" style="display:none;margin-bottom:20px;">
-    <div style="background:linear-gradient(135deg,rgba(124,58,237,.15),rgba(0,212,255,.1));border:1px solid rgba(124,58,237,.4);border-radius:16px;padding:22px 24px;">
-      <div style="font-size:14px;font-weight:800;color:#a78bfa;margin-bottom:10px;">📎 Passo 1 — Instalar o Bookmarklet (faça uma vez)</div>
-      <div style="font-size:12px;color:var(--muted);font-family:var(--font-mono);line-height:1.9;margin-bottom:16px;">
-        Arraste o botão abaixo para a <strong style="color:var(--text);">barra de favoritos</strong> do Chrome.<br>
-        Não aparece a barra? Pressione <strong style="color:var(--text);">Ctrl+Shift+B</strong>.
-      </div>
-      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
-        <a id="monBookmarklet" href="#"
-           style="background:linear-gradient(135deg,#7c3aed,#00d4ff);color:#fff;padding:12px 22px;border-radius:12px;font-family:var(--font-head);font-size:14px;font-weight:800;text-decoration:none;cursor:grab;white-space:nowrap;box-shadow:0 4px 20px rgba(124,58,237,.4);"
-           onclick="return false;">
-          ⚡ SinalPRO Monitor
-        </a>
-        <span style="font-size:11px;color:var(--muted);font-family:var(--font-mono);">← arraste para a barra de favoritos</span>
-      </div>
-      <div style="margin-top:14px;font-size:11px;color:var(--muted);font-family:var(--font-mono);line-height:1.9;">
-        <strong style="color:var(--text);">Passo 2:</strong> Clique em <strong style="color:var(--green);">▶ Iniciar Monitor</strong> nesta aba<br>
-        <strong style="color:var(--text);">Passo 3:</strong> Vá para a aba do <strong style="color:var(--text);">palpita.io</strong> com o evento de Rodovia<br>
-        <strong style="color:var(--text);">Passo 4:</strong> Clique no favorito <strong style="color:#a78bfa;">⚡ SinalPRO Monitor</strong> na barra<br>
-        <strong style="color:var(--text);">Passo 5:</strong> Volte para esta aba — dados chegam automaticamente ✅
-      </div>
-    </div>
+  <!-- Evento selecionado -->
+  <div id="monSelectedBanner" style="background:rgba(0,212,255,.06);border:1px solid rgba(0,212,255,.2);border-radius:14px;padding:16px 20px;margin-bottom:20px;">
+    <div style="font-size:10px;font-family:var(--font-mono);color:var(--accent);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">🎯 Evento Configurado para Monitorar</div>
+    <div id="monSelectedTitle" style="font-size:15px;font-weight:800;color:var(--text);">Nenhum evento selecionado</div>
+    <div id="monSelectedMeta" style="font-size:11px;font-family:var(--font-mono);color:var(--muted);margin-top:4px;">Vá para aba 🎯 Eventos → clique em um evento → 🚗 Monitorar este Evento</div>
+    <div id="monSelectedSels" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;"></div>
   </div>
 
   <div class="grid" style="margin-bottom:20px;">
     <div class="card">
       <div class="card-title">⚙ Configuração</div>
-      <div style="background:rgba(0,230,118,.06);border:1px solid rgba(0,230,118,.2);border-radius:10px;padding:12px 14px;margin-bottom:14px;">
-        <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:4px;">📡 Evento Monitorado</div>
-        <div id="monUrlDisplay" style="font-size:11px;font-family:var(--font-mono);color:var(--muted);word-break:break-all;">Aguardando...</div>
-      </div>
       <div class="field">
         <label>Disparar sinal quando faltar (segundos)</label>
         <input type="number" id="monTriggerSec" value="30" min="5" max="120" style="font-family:var(--font-mono);">
@@ -577,7 +565,7 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
         <input type="number" id="monMinReadings" value="5" min="2" max="30" style="font-family:var(--font-mono);">
       </div>
       <div class="field">
-        <label>Intervalo de polling API (segundos)</label>
+        <label>Intervalo de polling (segundos)</label>
         <input type="number" id="monPollInterval" value="3" min="2" max="15" style="font-family:var(--font-mono);">
       </div>
       <div style="display:flex;gap:10px;align-items:center;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px;">
@@ -590,49 +578,37 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
     </div>
 
     <div class="card">
-      <div class="card-title">📡 Status</div>
+      <div class="card-title">📡 Status ao Vivo</div>
       <div style="text-align:center;padding:16px 0;">
         <div id="monStatusIcon" style="font-size:42px;margin-bottom:10px;">⏸️</div>
         <div id="monStatusText" style="font-size:15px;font-weight:800;color:var(--muted);">Aguardando início</div>
-        <div id="monStatusSub" style="font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-top:4px;">Clique em Iniciar</div>
+        <div id="monStatusSub" style="font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-top:4px;">Selecione um evento e clique em Iniciar</div>
       </div>
       <div class="divider"></div>
-      <div id="monThresholds" style="display:none;">
-        <div style="font-size:10px;font-family:var(--font-mono);letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:10px;">🎯 Limites Detectados</div>
-        <div style="display:flex;gap:10px;">
-          <div style="flex:1;background:rgba(0,230,118,.08);border:1px solid rgba(0,230,118,.2);border-radius:10px;padding:10px;text-align:center;">
-            <div style="font-size:10px;color:var(--muted);font-family:var(--font-mono);">MAIS DE</div>
-            <div id="monThresholdMais" style="font-size:26px;font-weight:900;color:var(--green);">—</div>
-          </div>
-          <div style="flex:1;background:rgba(255,61,90,.08);border:1px solid rgba(255,61,90,.2);border-radius:10px;padding:10px;text-align:center;">
-            <div style="font-size:10px;color:var(--muted);font-family:var(--font-mono);">ATÉ</div>
-            <div id="monThresholdAte" style="font-size:26px;font-weight:900;color:var(--red);">—</div>
-          </div>
-        </div>
-      </div>
-      <!-- API Live Prices -->
-      <div id="apiLivePrices" style="display:none;margin-top:14px;">
-        <div style="font-size:10px;font-family:var(--font-mono);letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:8px;">💹 Preços Orderbook (Tempo Real)</div>
+      <!-- Preços orderbook ao vivo -->
+      <div id="monObPrices" style="display:none;">
+        <div style="font-size:10px;font-family:var(--font-mono);letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:10px;">💹 Orderbook ao Vivo</div>
+        <div id="monObPricesContent"></div>
       </div>
     </div>
   </div>
 
   <!-- DASHBOARD -->
   <div class="card" style="margin-bottom:20px;">
-    <div class="card-title">📊 Dados em Tempo Real</div>
+    <div class="card-title">📊 Probabilidade em Tempo Real</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:14px;margin-bottom:20px;">
       <div style="text-align:center;padding:16px;background:var(--bg);border:1px solid var(--border);border-radius:12px;">
-        <div style="font-size:10px;font-family:var(--font-mono);color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">Contagem</div>
+        <div style="font-size:10px;font-family:var(--font-mono);color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">Prob. MAIS</div>
         <div id="monCurrentCount" style="font-size:44px;font-weight:900;color:var(--gold);line-height:1;">—</div>
-        <div style="font-size:10px;color:var(--muted);margin-top:4px;">carros</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px;">%</div>
       </div>
       <div style="text-align:center;padding:16px;background:var(--bg);border:1px solid var(--border);border-radius:12px;">
         <div style="font-size:10px;font-family:var(--font-mono);color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">Projeção</div>
         <div id="monProjected" style="font-size:44px;font-weight:900;color:var(--accent);line-height:1;">—</div>
-        <div style="font-size:10px;color:var(--muted);margin-top:4px;">estimado</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px;">%</div>
       </div>
       <div style="text-align:center;padding:16px;background:var(--bg);border:1px solid var(--border);border-radius:12px;">
-        <div style="font-size:10px;font-family:var(--font-mono);color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">Apostas Fecham</div>
+        <div style="font-size:10px;font-family:var(--font-mono);color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">Aposta Fecha</div>
         <div id="monBetTime" style="font-size:44px;font-weight:900;color:var(--accent3);line-height:1;">—</div>
         <div style="font-size:10px;color:var(--muted);margin-top:4px;">segundos</div>
       </div>
@@ -678,7 +654,7 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
   <!-- LOG -->
   <div class="card">
     <div class="card-title">🗒 Log <button onclick="document.getElementById('monLog').innerHTML=''" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px;font-family:var(--font-mono);">limpar</button></div>
-    <div id="monLog" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;font-family:var(--font-mono);font-size:11px;line-height:1.8;max-height:200px;overflow-y:auto;">
+    <div id="monLog" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;font-family:var(--font-mono);font-size:11px;line-height:1.8;max-height:220px;overflow-y:auto;">
       <div style="color:var(--muted);">Aguardando início...</div>
     </div>
   </div>
@@ -1119,589 +1095,446 @@ document.addEventListener('DOMContentLoaded', function(){
 </script>
 
 
-<!-- MONITOR SCRIPT -->
+<!-- MONITOR + EVENTOS SCRIPT -->
 <script>
 // ═══════════════════════════════════════════════════════════════
-// MONITOR AUTOMÁTICO — RODOVIA PALPITA.IO  v7.0
-// MODO API: polling direto via API oficial Palpita.io
-// MODO BOOKMARKLET: Scraping via BroadcastChannel (fallback)
+// SINALPRO v8.0 — API Palpita.io
 // ═══════════════════════════════════════════════════════════════
 
-const MON = {
-  bc: null, tickTimer: null,
+// ── API FETCH (público — sem auth, cascata de proxies) ────────
+var PALPITA_BASE = 'https://app.palpita.io/api/v1';
+var _proxies = [
+  function(u){ return 'https://corsproxy.io/?' + encodeURIComponent(u); },
+  function(u){ return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u); },
+  function(u){ return 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u); },
+  function(u){ return 'https://thingproxy.freeboard.io/fetch/' + u; },
+];
+var _workingProxy = undefined; // undefined=desconhecido, 0=direto, 1..n=proxy i-1
+
+async function palpitaGet(path) {
+  var full = PALPITA_BASE + path;
+  var targets = [full].concat(_proxies.map(function(fn){ return fn(full); }));
+  // Se já temos um caminho funcionando, começa por ele
+  var start = (_workingProxy !== undefined) ? _workingProxy : 0;
+  var order = [start];
+  for (var i = 0; i < targets.length; i++) { if (i !== start) order.push(i); }
+
+  for (var oi = 0; oi < order.length; oi++) {
+    var idx = order[oi];
+    try {
+      var res = await fetch(targets[idx], { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) { if (idx === _workingProxy) _workingProxy = undefined; continue; }
+      var text = await res.text();
+      // allorigins embala em {status,contents}
+      if (targets[idx].includes('allorigins')) {
+        try { var wrap = JSON.parse(text); if (wrap.contents) text = wrap.contents; } catch(e){}
+      }
+      var data = JSON.parse(text);
+      _workingProxy = idx;
+      return data;
+    } catch(e) {
+      if (idx === _workingProxy) _workingProxy = undefined;
+    }
+  }
+  throw new Error('API inacessível — todos os caminhos falharam');
+}
+
+function proxyLabel() {
+  if (_workingProxy === undefined) return '?';
+  if (_workingProxy === 0) return 'direto';
+  return 'proxy #' + _workingProxy;
+}
+
+// ── PARSE RESPONSE ────────────────────────────────────────────
+function parseItems(data) {
+  if (Array.isArray(data)) return data;
+  if (data && Array.isArray(data.items)) return data.items;
+  if (data && Array.isArray(data.data)) return data.data;
+  if (data && typeof data === 'object') {
+    var keys = Object.keys(data);
+    for (var i = 0; i < keys.length; i++) {
+      if (Array.isArray(data[keys[i]])) return data[keys[i]];
+    }
+  }
+  return [];
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ABA EVENTOS
+// ═══════════════════════════════════════════════════════════════
+var EV = {
+  markets: [],
+  categories: [],
+  fetchTimer: null,
+  selectedMarket: null,
+  selectedOrderbook: null,
+};
+
+function evSetStatus(ok, label) {
+  var dot = document.getElementById('evDot');
+  var lbl = document.getElementById('evStatusLabel');
+  var proxy = document.getElementById('evProxyLabel');
+  if (dot) dot.style.background = ok ? 'var(--green)' : 'var(--red)';
+  if (dot) dot.style.boxShadow = ok ? '0 0 8px rgba(0,230,118,.6)' : 'none';
+  if (lbl) lbl.textContent = label;
+  if (proxy) proxy.textContent = proxyLabel();
+}
+
+async function evFetch(manual) {
+  try {
+    // Busca categorias e mercados em paralelo
+    var [catData, mktData] = await Promise.all([
+      palpitaGet('/categories'),
+      palpitaGet('/markets?status=OPEN&limit=100&orderBy=closesAt&orderDirection=ASC')
+    ]);
+    EV.categories = Array.isArray(catData) ? catData : parseItems(catData);
+    EV.markets    = parseItems(mktData);
+
+    // Atualiza filtro de categorias
+    var catSel = document.getElementById('evCatFilter');
+    if (catSel && EV.categories.length) {
+      var cur = catSel.value;
+      catSel.innerHTML = '<option value="">Todas categorias</option>' +
+        EV.categories.map(function(c){ return '<option value="'+c.id+'">'+ c.name +'</option>'; }).join('');
+      catSel.value = cur;
+    }
+
+    // Stats
+    var g = function(id){ return document.getElementById(id); };
+    if (g('evCountOpen')) g('evCountOpen').textContent = EV.markets.length;
+    if (g('evCountCats')) g('evCountCats').textContent = EV.categories.length;
+    if (g('eventosBadge')) g('eventosBadge').textContent = EV.markets.length;
+
+    // Próximo a fechar
+    if (EV.markets.length) {
+      var soonest = EV.markets.reduce(function(a,b){
+        return new Date(a.closesAt||'9999') < new Date(b.closesAt||'9999') ? a : b;
+      });
+      var closes = soonest.closesAt ? new Date(soonest.closesAt).toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'}) : '—';
+      if (g('evNextClose')) g('evNextClose').textContent = closes;
+    }
+
+    // Timestamp
+    var now = new Date().toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo'});
+    if (g('evLastUpdate')) g('evLastUpdate').textContent = 'Última atualização: ' + now + ' | auto-refresh 10s';
+
+    evSetStatus(true, 'Conectado');
+    evRender();
+  } catch(e) {
+    evSetStatus(false, 'Erro: ' + e.message.substring(0, 40));
+    if (manual) showToast('❌ ' + e.message, 'error');
+  }
+}
+
+function evRender() {
+  var q = ((document.getElementById('evSearch')||{}).value||'').toLowerCase();
+  var catId = (document.getElementById('evCatFilter')||{}).value || '';
+  var grid = document.getElementById('evGrid');
+  if (!grid) return;
+
+  var list = EV.markets.filter(function(m) {
+    if (q && !(m.title||'').toLowerCase().includes(q) && !(m.slug||'').toLowerCase().includes(q)) return false;
+    if (catId && String(m.categoryId) !== String(catId)) return false;
+    return true;
+  });
+
+  if (!list.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--muted);font-family:var(--font-mono);">Nenhum evento encontrado.</div>';
+    return;
+  }
+
+  grid.innerHTML = list.map(function(m) {
+    var closes = m.closesAt ? new Date(m.closesAt) : null;
+    var now    = new Date();
+    var diffMs = closes ? closes - now : null;
+    var diffStr = '—';
+    var urgency = '';
+    if (diffMs !== null) {
+      if (diffMs < 0) { diffStr = 'Encerrado'; urgency = 'color:var(--red)'; }
+      else if (diffMs < 5*60*1000) { diffStr = Math.round(diffMs/1000)+'s'; urgency = 'color:var(--red);font-weight:900;'; }
+      else if (diffMs < 30*60*1000) { var m2=Math.floor(diffMs/60000); diffStr = m2+'min'; urgency = 'color:var(--gold);'; }
+      else { var h=Math.floor(diffMs/3600000); var mn=Math.floor((diffMs%3600000)/60000); diffStr=(h?h+'h ':'')+mn+'min'; }
+    }
+    var selCount = (m.selections||[]).length;
+    var isMonitoring = MON.apiMarketId === m.id;
+    var border = isMonitoring ? 'border-color:var(--accent);' : '';
+    var monBadge = isMonitoring ? '<span style="background:rgba(0,212,255,.15);border:1px solid var(--accent);color:var(--accent);border-radius:6px;padding:2px 8px;font-size:9px;font-family:var(--font-mono);">MONITORANDO</span>' : '';
+    return '<div style="background:var(--bg);border:1px solid var(--border);'+border+'border-radius:14px;padding:16px;cursor:pointer;transition:all .2s;" onclick="evOpenOb('+m.id+')" onmouseover="this.style.borderColor=\'var(--accent)\'" onmouseout="this.style.borderColor=\''+(isMonitoring?'var(--accent)':'var(--border)')+'\'">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;">'+
+        '<div style="font-size:13px;font-weight:800;color:var(--text);flex:1;line-height:1.3;">'+(m.title||'')+'</div>'+
+        '<div style="font-size:11px;font-family:var(--font-mono);'+urgency+';white-space:nowrap;padding-top:2px;">'+diffStr+'</div>'+
+      '</div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'+
+        '<span style="font-size:10px;font-family:var(--font-mono);color:var(--muted);">ID:'+m.id+'</span>'+
+        '<span style="font-size:10px;font-family:var(--font-mono);color:var(--muted);">'+selCount+' seleções</span>'+
+        monBadge+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
+async function evOpenOb(marketId) {
+  var market = EV.markets.find(function(m){ return m.id === marketId; });
+  if (!market) return;
+  EV.selectedMarket = market;
+
+  // Abre modal
+  var modal = document.getElementById('evObModal');
+  if (modal) { modal.style.display = 'flex'; }
+  var titleEl = document.getElementById('evObTitle');
+  var metaEl  = document.getElementById('evObMeta');
+  var content = document.getElementById('evObContent');
+  if (titleEl) titleEl.textContent = market.title || '';
+  var closes = market.closesAt ? new Date(market.closesAt).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}) : '—';
+  if (metaEl) metaEl.textContent = 'ID: '+market.id+' | Fecha: '+closes+' | '+( (market.selections||[]).length )+' seleções';
+  if (content) content.innerHTML = '<div style="color:var(--muted);font-family:var(--font-mono);font-size:12px;">⏳ Carregando orderbook...</div>';
+
+  try {
+    var ob = await palpitaGet('/orderbook?marketId=' + marketId + '&limit=10');
+    EV.selectedOrderbook = ob;
+    if (content) content.innerHTML = evRenderOb(ob, market);
+  } catch(e) {
+    if (content) content.innerHTML = '<div style="color:var(--red);font-family:var(--font-mono);font-size:12px;">❌ '+e.message+'</div>';
+  }
+}
+
+function evRenderOb(ob, market) {
+  if (!ob || !ob.selections || !ob.selections.length) {
+    return '<div style="color:var(--muted);font-family:var(--font-mono);font-size:12px;">Sem dados no orderbook.</div>';
+  }
+  var html = '';
+  ob.selections.forEach(function(sel) {
+    var bids = (sel.bids||[]).slice(0,5);
+    var asks = (sel.asks||[]).slice(0,5);
+    var bestBid = bids.length ? parseFloat(bids[0].price) : null;
+    var pct = bestBid !== null ? (bestBid*100).toFixed(1)+'%' : '—';
+    html += '<div style="margin-bottom:18px;">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
+    html += '<div style="font-size:13px;font-weight:800;color:var(--text);">'+(sel.name||'Seleção')+'</div>';
+    html += '<div style="font-size:18px;font-weight:900;color:var(--gold);">'+pct+'</div>';
+    html += '</div>';
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">';
+    // Bids
+    html += '<div><div style="font-size:9px;font-family:var(--font-mono);color:var(--green);letter-spacing:1px;margin-bottom:4px;">COMPRA (BID)</div>';
+    if (bids.length) {
+      bids.forEach(function(b){ html += '<div style="display:flex;justify-content:space-between;font-size:11px;font-family:var(--font-mono);padding:3px 0;border-bottom:1px solid rgba(0,230,118,.1);">'+
+        '<span style="color:var(--green);">'+parseFloat(b.price).toFixed(3)+'</span><span style="color:var(--muted);">'+parseFloat(b.quantity).toFixed(0)+'</span></div>'; });
+    } else { html += '<div style="color:var(--muted);font-size:11px;font-family:var(--font-mono);">—</div>'; }
+    html += '</div>';
+    // Asks
+    html += '<div><div style="font-size:9px;font-family:var(--font-mono);color:var(--red);letter-spacing:1px;margin-bottom:4px;">VENDA (ASK)</div>';
+    if (asks.length) {
+      asks.forEach(function(a){ html += '<div style="display:flex;justify-content:space-between;font-size:11px;font-family:var(--font-mono);padding:3px 0;border-bottom:1px solid rgba(255,61,90,.1);">'+
+        '<span style="color:var(--red);">'+parseFloat(a.price).toFixed(3)+'</span><span style="color:var(--muted);">'+parseFloat(a.quantity).toFixed(0)+'</span></div>'; });
+    } else { html += '<div style="color:var(--muted);font-size:11px;font-family:var(--font-mono);">—</div>'; }
+    html += '</div>';
+    html += '</div></div><hr style="border:none;border-top:1px solid var(--border);margin-bottom:14px;">';
+  });
+  return html;
+}
+
+function evCloseOb() {
+  var modal = document.getElementById('evObModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function evSendToMonitor() {
+  if (!EV.selectedMarket) return;
+  var m = EV.selectedMarket;
+  MON.apiMarketId      = m.id;
+  MON.apiLastEventTitle= m.title || '';
+  MON.currentUrl       = 'https://app.palpita.io/live/' + m.id + '-market/' + (m.slug||'');
+  MON._workingProxy_ev  = _workingProxy; // compartilha proxy descoberto
+
+  // Atualiza banner no Monitor
+  var t = document.getElementById('monSelectedTitle');
+  var meta = document.getElementById('monSelectedMeta');
+  var sels = document.getElementById('monSelectedSels');
+  if (t) t.textContent = m.title || '';
+  var closes = m.closesAt ? new Date(m.closesAt).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}) : '—';
+  if (meta) meta.textContent = 'ID: '+m.id+' | Fecha: '+closes+' | URL: '+MON.currentUrl;
+  if (sels && m.selections && m.selections.length) {
+    sels.innerHTML = m.selections.map(function(s){
+      return '<span style="background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.2);border-radius:6px;padding:4px 10px;font-size:11px;font-family:var(--font-mono);color:var(--accent);">'+s.name+' (ID:'+s.id+')</span>';
+    }).join('');
+  }
+
+  evCloseOb();
+  evRender(); // atualiza badge MONITORANDO
+  switchTab('monitor', document.getElementById('tab-monitor'));
+  showToast('✅ Evento enviado ao Monitor!');
+}
+
+// Auto-refresh a cada 10s
+function evStartPolling() {
+  evFetch(false);
+  EV.fetchTimer = setInterval(function(){ evFetch(false); }, 10000);
+}
+
+function evStopPolling() {
+  if (EV.fetchTimer) { clearInterval(EV.fetchTimer); EV.fetchTimer = null; }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MONITOR
+// ═══════════════════════════════════════════════════════════════
+var MON = {
+  tickTimer: null,
   readings: [],
   thresholdMais: null, thresholdAte: null,
   betClosesSec: null,
   signalFired: false,
   signalMD: '', signalBot: '',
   running: false,
-  eventId: '', eventSlug: '', currentUrl: '',
-  // API mode
-  mode: 'api',        // 'api' | 'bookmarklet'
+  eventId: '', currentUrl: '',
   apiMarketId: null,
-  apiSelectionId: null,
-  apiPollTimer: null,
-  apiToken: null,
   apiLastEventTitle: '',
+  apiPollTimer: null,
 };
 
-// ── MODO SELECTOR ─────────────────────────────────────────────
-function setMonMode(mode) {
-  MON.mode = mode;
-  var btnApi = document.getElementById('modeApiBtn');
-  var btnBmk = document.getElementById('modeBmkBtn');
-  var panApi = document.getElementById('panelApi');
-  var panBmk = document.getElementById('panelBmk');
-  var sub    = document.getElementById('monSubtitle');
-  if (mode === 'api') {
-    if (btnApi) { btnApi.style.border = '2px solid var(--accent)'; btnApi.style.background = 'rgba(0,212,255,.1)'; btnApi.style.color = 'var(--accent)'; }
-    if (btnBmk) { btnBmk.style.border = '1px solid var(--border)'; btnBmk.style.background = 'transparent'; btnBmk.style.color = 'var(--muted)'; }
-    if (panApi) panApi.style.display = '';
-    if (panBmk) panBmk.style.display = 'none';
-    if (sub) sub.textContent = 'Modo API Palpita.io — polling direto, sem bookmarklet';
-  } else {
-    if (btnBmk) { btnBmk.style.border = '2px solid var(--accent3)'; btnBmk.style.background = 'rgba(124,58,237,.1)'; btnBmk.style.color = '#a78bfa'; }
-    if (btnApi) { btnApi.style.border = '1px solid var(--border)'; btnApi.style.background = 'transparent'; btnApi.style.color = 'var(--muted)'; }
-    if (panApi) panApi.style.display = 'none';
-    if (panBmk) panBmk.style.display = '';
-    if (sub) sub.textContent = 'Modo Bookmarklet — scraping via favorito do Chrome';
-    monInitBookmarklet();
-  }
-}
-
-// ── API PALPITA.IO ────────────────────────────────────────────
-function apiGetToken() {
-  var key    = (document.getElementById('apiKeyInput')    || {}).value || '';
-  var secret = (document.getElementById('apiSecretInput') || {}).value || '';
-  if (!key || !secret) return null;
-  return btoa(key.trim() + ':' + secret.trim());
-}
-
-function apiHeaders() {
-  var token = apiGetToken();
-  var h = { 'Accept': 'application/json', 'Content-Type': 'application/json' };
-  if (token) h['Authorization'] = 'Bearer ' + token;
-  return h;
-}
-
-var _apiSearchTimeout = null;
-function apiSearchDebounce() {
-  clearTimeout(_apiSearchTimeout);
-  _apiSearchTimeout = setTimeout(apiFetchMarkets, 500);
-}
-
-// ── CORS-RESILIENT FETCH ──────────────────────────────────────────
-// Tenta direto → proxy1 → proxy2 automaticamente
-var PALPITA_BASE = 'https://app.palpita.io/api/v1';
-var _corsProxies = [
-  function(u){ return 'https://corsproxy.io/?' + encodeURIComponent(u); },
-  function(u){ return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u); },
-  function(u){ return 'https://thingproxy.freeboard.io/fetch/' + u; },
-];
-
-async function palpitaFetch(path, opts) {
-  opts = opts || {};
-  var hdrs = apiHeaders();
-  // Tenta direto primeiro (sem proxy)
-  var targets = [
-    { url: PALPITA_BASE + path, useProxy: false },
-  ];
-  // Adiciona proxies como fallback
-  _corsProxies.forEach(function(fn) {
-    targets.push({ url: fn(PALPITA_BASE + path), useProxy: true });
-  });
-
-  var lastErr = null;
-  for (var i = 0; i < targets.length; i++) {
-    try {
-      var fetchOpts = { method: opts.method || 'GET', headers: hdrs };
-      if (opts.body) fetchOpts.body = opts.body;
-      var res = await fetch(targets[i].url, fetchOpts);
-      if (!res.ok) { lastErr = new Error('HTTP ' + res.status); continue; }
-      var data = await res.json();
-      // Guarda qual proxy funcionou para usar nas próximas chamadas
-      if (targets[i].useProxy) {
-        MON._workingProxyIdx = i - 1; // índice no array _corsProxies
-        monLog('🔌 CORS proxy ativo: ' + targets[i].url.split('?')[0], 'var(--muted)');
-      } else {
-        MON._workingProxyIdx = -1;
-      }
-      return data;
-    } catch(e) {
-      lastErr = e;
-    }
-  }
-  throw lastErr || new Error('Todas as tentativas falharam');
-}
-
-// Versão rápida que usa o proxy já conhecido (evita tentar direto toda vez)
-async function palpitaFetchFast(path, opts) {
-  if (MON._workingProxyIdx === undefined || MON._workingProxyIdx === -1) {
-    return palpitaFetch(path, opts); // descobre qual funciona
-  }
-  var url = _corsProxies[MON._workingProxyIdx](PALPITA_BASE + path);
-  var hdrs = apiHeaders();
-  var fetchOpts = { method: (opts && opts.method) || 'GET', headers: hdrs };
-  if (opts && opts.body) fetchOpts.body = opts.body;
-  var res = await fetch(url, fetchOpts);
-  if (!res.ok) {
-    // Proxy parou de funcionar — redescobre
-    MON._workingProxyIdx = undefined;
-    return palpitaFetch(path, opts);
-  }
-  return await res.json();
-}
-
-async function apiTestConnection() {
-  var msg = document.getElementById('apiStatusMsg');
-  if (msg) { msg.textContent = '⏳ Testando conexão...'; msg.style.color = 'var(--muted)'; }
-  // Força redescoberta do proxy
-  MON._workingProxyIdx = undefined;
-  try {
-    var data = await palpitaFetch('/categories');
-    var cats = Array.isArray(data) ? data : (data.items || data.data || []);
-    var proxyLabel = MON._workingProxyIdx === undefined || MON._workingProxyIdx === -1
-      ? 'direto'
-      : 'proxy ' + (MON._workingProxyIdx + 1);
-    if (msg) {
-      msg.textContent = '✅ Conectado via ' + proxyLabel + ' | ' + cats.length + ' categorias recebidas';
-      msg.style.color = 'var(--green)';
-    }
-    showToast('✅ API Palpita.io conectada!');
-    // Busca eventos automaticamente
-    apiFetchMarkets();
-  } catch(e) {
-    if (msg) {
-      msg.textContent = '❌ Falha em todos os proxies: ' + e.message + '. Use o Modo Bookmarklet.';
-      msg.style.color = 'var(--red)';
-    }
-    showToast('❌ API inacessível — use Bookmarklet', 'error');
-  }
-}
-
-async function apiFetchMarkets() {
-  var q = (document.getElementById('apiSearchInput') || {}).value || '';
-  var msg = document.getElementById('apiStatusMsg');
-  var list = document.getElementById('apiMarketList');
-  if (msg) { msg.textContent = '🔍 Buscando mercados...'; msg.style.color = 'var(--muted)'; }
-  if (list) list.style.display = 'none';
-  try {
-    var path = '/markets?status=OPEN&limit=50&orderBy=closesAt&orderDirection=ASC';
-    if (q) path += '&search=' + encodeURIComponent(q);
-    var data = await palpitaFetch(path);
-    var items = Array.isArray(data) ? data : (data.items || []);
-    if (!items.length) {
-      if (msg) { msg.textContent = '⚠️ Nenhum evento aberto encontrado.'; msg.style.color = 'var(--gold)'; }
-      return;
-    }
-    if (msg) { msg.textContent = '✅ ' + items.length + ' eventos encontrados'; msg.style.color = 'var(--green)'; }
-    var container = document.getElementById('apiMarketItems');
-    if (container) {
-      container.innerHTML = items.map(function(m) {
-        var closes = m.closesAt ? new Date(m.closesAt).toLocaleString('pt-BR', {timeZone:'America/Sao_Paulo', hour:'2-digit', minute:'2-digit'}) : '—';
-        var selJson = JSON.stringify(m.selections || []).replace(/"/g,'&quot;');
-        var titleSafe = (m.title||'').replace(/'/g,'&#39;');
-        return '<div onclick="apiSelectMarket(' + m.id + ',\'' + titleSafe + '\',JSON.parse(this.dataset.sel))" data-sel="' + selJson + '" ' +
-          'style="padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);margin-bottom:6px;cursor:pointer;transition:all .15s;" ' +
-          'onmouseover="this.style.borderColor=\'var(--accent)\'" onmouseout="this.style.borderColor=\'var(--border)\'">' +
-          '<div style="font-size:12px;font-weight:700;color:var(--text);">' + (m.title||'') + '</div>' +
-          '<div style="font-size:10px;color:var(--muted);font-family:var(--font-mono);margin-top:3px;">ID: ' + m.id + ' | Fecha: ' + closes + ' | ' + (m.selections||[]).length + ' seleções</div>' +
-          '</div>';
-      }).join('');
-    }
-    if (list) list.style.display = '';
-  } catch(e) {
-    if (msg) { msg.textContent = '❌ Erro: ' + e.message + ' — verifique a URL da API ou tente o Modo Bookmarklet.'; msg.style.color = 'var(--red)'; }
-  }
-}
-
-function apiSelectMarket(id, title, selections) {
-  MON.apiMarketId = id;
-  MON.apiLastEventTitle = title;
-  MON.apiSelectionId = null;
-
-  var sel = document.getElementById('apiSelectedMarket');
-  var tit = document.getElementById('apiMarketTitle');
-  var met = document.getElementById('apiMarketMeta');
-  var sw  = document.getElementById('apiSelectionsWrap');
-  var list = document.getElementById('apiMarketList');
-
-  if (sel) sel.style.display = '';
-  if (tit) tit.textContent = title;
-  if (met) met.textContent = 'Market ID: ' + id + ' | ' + selections.length + ' seleções';
-  if (list) list.style.display = 'none';
-
-  if (sw) {
-    if (selections.length === 0) {
-      sw.innerHTML = '<span style="font-size:11px;color:var(--muted);font-family:var(--font-mono);">Sem seleções — monitoramento por orderbook</span>';
-    } else if (selections.length === 2) {
-      // Para mercados binários como Rodovia (MAIS / ATÉ), auto-detecta
-      sw.innerHTML = '<span style="font-size:11px;color:var(--green);font-family:var(--font-mono);">✅ Seleções detectadas automaticamente: ' +
-        selections.map(function(s){ return s.name; }).join(' / ') + '</span>';
-      // guarda ambas as seleções para mapear mais/até depois
-      MON._apiSelections = selections;
-    } else {
-      sw.innerHTML = selections.map(function(s) {
-        return '<button onclick="apiPickSelection(' + s.id + ',\'' + (s.name||'').replace(/'/g,"\\'") + '\')" ' +
-          'style="padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:var(--font-head);font-size:12px;font-weight:700;cursor:pointer;">' +
-          s.name + ' (ID:' + s.id + ')</button>';
-      }).join('');
-    }
-  }
-
-  var url = 'https://app.palpita.io/live/' + id + '-market/' + (title||'').toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'');
-  MON.currentUrl = url;
-  var disp = document.getElementById('monUrlDisplay');
-  if (disp) { disp.textContent = url; disp.style.color = 'var(--green)'; }
-  showToast('✅ Mercado selecionado: ' + title.substring(0,30));
-}
-
-function apiPickSelection(id, name) {
-  MON.apiSelectionId = id;
-  var sw = document.getElementById('apiSelectionsWrap');
-  if (sw) sw.innerHTML = '<span style="font-size:11px;color:var(--green);font-family:var(--font-mono);">✅ Seleção: ' + name + ' (ID:' + id + ')</span>';
-}
-
-// ── POLLING DA API ────────────────────────────────────────────
-async function apiPollOnce() {
-  if (!MON.running || MON.mode !== 'api') return;
-  if (!MON.apiMarketId) {
-    monLog('⚠️ Nenhum mercado selecionado.', 'var(--gold)');
-    return;
-  }
-  try {
-    // Busca orderbook (rota pública)
-    var ob = await palpitaFetchFast('/orderbook?marketId=' + MON.apiMarketId + '&limit=10');
-
-    // Dados do mercado (fechamento)
-    var mkt = null;
-    try { mkt = await palpitaFetchFast('/markets/' + MON.apiMarketId); } catch(e) {}
-
-    // Detectar fechamento de apostas pelo status
-    if (mkt) {
-      if (mkt.status === 'FROZEN' || mkt.status === 'RESOLVED') {
-        monLog('🔒 Mercado encerrado: ' + mkt.status, 'var(--gold)');
-        MON.betClosesSec = 0;
-      }
-      if (mkt.closesAt) {
-        var closes = new Date(mkt.closesAt);
-        var now    = new Date();
-        var diffSec = Math.max(0, Math.round((closes - now) / 1000));
-        MON.betClosesSec = diffSec;
-      }
-    }
-
-    // Extrair preços do orderbook
-    if (ob && ob.selections && ob.selections.length > 0) {
-      var sels = ob.selections;
-
-      // Mapear MAIS DE / ATÉ pelas seleções
-      var selMais = null, selAte = null;
-      sels.forEach(function(s) {
-        var n = (s.name || '').toLowerCase();
-        if (n.includes('mais') || n.includes('over') || n.includes('acima') || n.includes('sim')) selMais = s;
-        else if (n.includes('até') || n.includes('ate') || n.includes('under') || n.includes('menos') || n.includes('não') || n.includes('nao')) selAte = s;
-      });
-      if (!selMais && sels.length >= 1) selMais = sels[0];
-      if (!selAte  && sels.length >= 2) selAte  = sels[1];
-
-      function bestPrice(s) {
-        if (!s) return null;
-        var bid = (s.bids && s.bids.length) ? parseFloat(s.bids[0].price) : null;
-        var ask = (s.asks && s.asks.length) ? parseFloat(s.asks[0].price) : null;
-        // Preferência: melhor bid (mercado real), fallback ask
-        return bid || ask;
-      }
-
-      var pMais = bestPrice(selMais);
-      var pAte  = bestPrice(selAte);
-
-      if (pMais !== null && pAte !== null) {
-        var total = pMais + pAte;
-        var probMais = total > 0 ? pMais / total : 0.5;
-        var virtualCount = Math.round(probMais * 100);
-
-        MON.thresholdMais = 60;
-        MON.thresholdAte  = 40;
-
-        var fakeData = {
-          id:         String(MON.apiMarketId),
-          slug:       MON.apiLastEventTitle,
-          url:        MON.currentUrl,
-          count:      virtualCount,
-          mais:       MON.thresholdMais,
-          ate:        MON.thresholdAte,
-          bet:        MON.betClosesSec,
-          _pMais:     pMais,
-          _pAte:      pAte,
-          _probMais:  probMais,
-        };
-
-        monLog(
-          '💹 ' + (selMais ? selMais.name : 'SIM') + '@R$' + (pMais*100).toFixed(1) + '¢ | ' +
-          (selAte  ? selAte.name  : 'NÃO') + '@R$' + (pAte*100).toFixed(1) + '¢' +
-          ' | Prob: ' + (probMais*100).toFixed(1) + '% | Aposta: ' + (MON.betClosesSec != null ? MON.betClosesSec + 's' : '?'),
-          'var(--text)'
-        );
-
-        monReceive(fakeData);
-      } else if (pMais !== null) {
-        // Só tem uma seleção com preço
-        var virtualCount2 = Math.round(pMais * 100);
-        MON.thresholdMais = 60; MON.thresholdAte = 40;
-        monLog('⚠️ Apenas 1 lado com preço — usando prob simples: ' + (pMais*100).toFixed(1) + '%', 'var(--gold)');
-        monReceive({ id: String(MON.apiMarketId), count: virtualCount2, mais: 60, ate: 40, bet: MON.betClosesSec });
-      } else {
-        monLog('⚠️ Orderbook sem preços — aguardando liquidez.', 'var(--gold)');
-      }
-    } else {
-      monLog('⚠️ Orderbook vazio — mercado sem atividade.', 'var(--gold)');
-    }
-  } catch(e) {
-    monLog('❌ Erro API: ' + e.message, 'var(--red)');
-  }
-}
-
-// ── API STATUS na UI (exibe preços reais) ─────────────────────
-var MON_API_PANEL_EL = null;
-function apiShowPrices(pMais, pAte, probMais) {
-  var el = document.getElementById('apiLivePrices');
-  if (!el) return;
-  el.style.display = '';
-  el.innerHTML =
-    '<div style="display:flex;gap:10px;">' +
-    '<div style="flex:1;text-align:center;background:rgba(0,230,118,.08);border:1px solid rgba(0,230,118,.2);border-radius:8px;padding:8px;">' +
-      '<div style="font-size:9px;color:var(--muted);font-family:var(--font-mono);">MAIS DE (bid)</div>' +
-      '<div style="font-size:20px;font-weight:900;color:var(--green);">R$' + (pMais*100).toFixed(1) + '¢</div>' +
-      '<div style="font-size:10px;color:var(--muted);">' + (probMais*100).toFixed(1) + '%</div>' +
-    '</div>' +
-    '<div style="flex:1;text-align:center;background:rgba(255,61,90,.08);border:1px solid rgba(255,61,90,.2);border-radius:8px;padding:8px;">' +
-      '<div style="font-size:9px;color:var(--muted);font-family:var(--font-mono);">ATÉ (bid)</div>' +
-      '<div style="font-size:20px;font-weight:900;color:var(--red);">R$' + (pAte*100).toFixed(1) + '¢</div>' +
-      '<div style="font-size:10px;color:var(--muted);">' + ((1-probMais)*100).toFixed(1) + '%</div>' +
-    '</div>' +
-    '</div>';
-}
-
-
-// ── BOOKMARKLET ───────────────────────────────────────────────────
-// Este código vai rodar no contexto do palpita.io quando clicado
-function monBuildBookmarklet() {
-  // Construído como string para evitar qualquer problema de escape
-  var parts = [
-    '(function(){',
-    'var CH="sinalpro-rodovia";',
-    'if(window._sp){clearInterval(window._sp);}',
-    'var bc=new BroadcastChannel(CH);',
-    'function scrape(){',
-    '  var d={ts:Date.now()};',
-    // URL -> eventId
-    '  var sm=location.href.match(/rodovia-5-minutos-qu-(\\d+)/);',
-    '  if(sm){d.id=sm[1];d.slug="rodovia-5-minutos-qu-"+sm[1];d.url=location.href;}',
-    // Texto completo da página
-    '  var txt=document.body.innerText||"";',
-    // Contagem: número após "CONTAGEM ATUAL"
-    '  var cm=txt.match(/CONTAGEM[\\s\\S]{0,20}?\\n(\\d{1,4})\\n/i)||txt.match(/^(\\d{1,4})$/m);',
-    '  if(cm)d.count=parseInt(cm[1]);',
-    // Tempo apostas: "01:42" perto de ENCERRAM
-    '  var tm=txt.match(/ENCERRAM[\\s\\S]{0,20}?(\\d{1,2}):(\\d{2})/i);',
-    '  if(tm)d.bet=parseInt(tm[1])*60+parseInt(tm[2]);',
-    '  if(/encerradas/i.test(txt))d.bet=0;',
-    // Thresholds
-    '  var mm=txt.match(/[Mm]ais\\s+de\\s+(\\d+)/);if(mm)d.mais=parseInt(mm[1]);',
-    '  var am=txt.match(/[Aa]t[\\u00e9e]\\s+(\\d+)/);if(am)d.ate=parseInt(am[1]);',
-    // __NEXT_DATA__ JSON (mais preciso)
-    '  var nd=document.getElementById("__NEXT_DATA__");',
-    '  if(nd){try{',
-    '    var j=nd.textContent;',
-    '    var cv=j.match(/"current_value":(\\d+)/);if(cv)d.count=parseInt(cv[1]);',
-    '    var bc2=j.match(/"bet_closes_in":(\\d+)/)||j.match(/"closes_in":(\\d+)/);if(bc2)d.bet=parseInt(bc2[1]);',
-    '    var mo=j.match(/"mais_de":(\\d+)/)||j.match(/"threshold_mais":(\\d+)/);if(mo)d.mais=parseInt(mo[1]);',
-    '    var ao=j.match(/"ate":(\\d+)/)||j.match(/"threshold_ate":(\\d+)/);if(ao)d.ate=parseInt(ao[1]);',
-    '  }catch(e){}}',
-    '  bc.postMessage(d);',
-    // Badge visual
-    '  var fb=document.getElementById("_sp_badge");',
-    '  if(!fb){fb=document.createElement("div");fb.id="_sp_badge";',
-    '  fb.style="position:fixed;bottom:16px;right:16px;background:#7c3aed;color:#fff;padding:8px 16px;border-radius:100px;font-size:12px;font-weight:700;z-index:99999;font-family:monospace;";',
-    '  document.body.appendChild(fb);}',
-    '  fb.textContent="⚡ SinalPRO: "+(d.count!==undefined?d.count+" carros":"lendo...");',
-    '}',
-    'scrape();',
-    'window._sp=setInterval(scrape,2000);',
-    // Toast de confirmação
-    'var t=document.createElement("div");',
-    't.style="position:fixed;top:20px;right:20px;background:#00e676;color:#000;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:700;z-index:99999;";',
-    't.textContent="✅ SinalPRO ativado!";',
-    'document.body.appendChild(t);',
-    'setTimeout(function(){t.remove();},3000);',
-    '})();'
-  ];
-  var code = parts.join('');
-  return 'javascript:' + encodeURIComponent(code);
-}
-
-function monInitBookmarklet() {
-  var a = document.getElementById('monBookmarklet');
-  if (a) {
-    a.href = monBuildBookmarklet();
-    a.setAttribute('draggable', 'true');
-  }
-}
-
-// ── LOG / STATUS ──────────────────────────────────────────────────
 function monLog(msg, c) {
   c = c || 'var(--muted)';
   var el = document.getElementById('monLog');
   if (!el) return;
-  var t = new Date().toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:'America/Sao_Paulo'});
+  var t = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:'America/Sao_Paulo'});
   var d = document.createElement('div');
   d.style.color = c;
-  d.textContent = '[' + t + '] ' + msg;
+  d.textContent = '['+t+'] '+msg;
   el.insertBefore(d, el.firstChild);
-  while (el.children.length > 300) el.removeChild(el.lastChild);
+  while (el.children.length > 200) el.removeChild(el.lastChild);
 }
 
 function monSt(icon, text, sub, c) {
   c = c || 'var(--muted)';
   var g = function(id){ return document.getElementById(id); };
-  if (g('monStatusIcon')) g('monStatusIcon').textContent = icon;
-  if (g('monStatusText')) { g('monStatusText').textContent = text; g('monStatusText').style.color = c; }
-  if (g('monStatusSub'))  g('monStatusSub').textContent = sub;
+  if (g('monStatusIcon'))  g('monStatusIcon').textContent  = icon;
+  if (g('monStatusText'))  { g('monStatusText').textContent = text; g('monStatusText').style.color = c; }
+  if (g('monStatusSub'))   g('monStatusSub').textContent   = sub;
 }
 
-// ── INICIAR ───────────────────────────────────────────────────────
 function monitorStart() {
-  var brt = new Date(new Date().toLocaleString('en-US', {timeZone:'America/Sao_Paulo'}));
-  var hm = brt.getHours()*60 + brt.getMinutes();
-  if (hm < 9*60 || hm > 23*60+30) {
-    showToast('⚠️ Fora do horário (09:00–23:30 BRT)', 'error');
-    monLog('⚠️ Fora do horário', 'var(--red)');
+  if (!MON.apiMarketId) {
+    showToast('⚠️ Selecione um evento na aba 🎯 Eventos primeiro.', 'error');
+    monLog('⚠️ Nenhum evento selecionado.', 'var(--gold)');
     return;
   }
-
-  // Validação modo API
-  if (MON.mode === 'api') {
-    if (!MON.apiMarketId) {
-      showToast('⚠️ Selecione um evento antes de iniciar.', 'error');
-      monLog('⚠️ Selecione um mercado no Modo API primeiro.', 'var(--gold)');
-      return;
-    }
-  }
-
   monitorStop(false);
   MON.running = true;
   MON.readings = []; MON.signalFired = false;
   MON.thresholdMais = null; MON.thresholdAte = null;
   MON.betClosesSec = null;
-  MON.eventId = String(MON.apiMarketId || '');
-  MON.eventSlug = '';
+  MON.eventId = String(MON.apiMarketId);
 
-  document.getElementById('monStartBtn').style.display = 'none';
-  document.getElementById('monStopBtn').style.display = '';
-  document.getElementById('monLiveTag').style.display = '';
-  document.getElementById('monitorBadge').style.display = '';
-  document.getElementById('monSignalCard').style.display = 'none';
+  var g = function(id){ return document.getElementById(id); };
+  g('monStartBtn').style.display = 'none';
+  g('monStopBtn').style.display  = '';
+  g('monLiveTag').style.display  = '';
+  g('monitorBadge').style.display = '';
+  g('monSignalCard').style.display = 'none';
 
-  if (MON.mode === 'api') {
-    // ── MODO API ──
-    var disp = document.getElementById('monUrlDisplay');
-    if (disp) { disp.textContent = '🌐 API: Market ID ' + MON.apiMarketId + ' — ' + MON.apiLastEventTitle; disp.style.color = 'var(--accent)'; }
-    monLog('🌐 Modo API iniciado | Market ID: ' + MON.apiMarketId, 'var(--accent)');
-    monSt('🌐', 'Conectando via API...', 'Market ID: ' + MON.apiMarketId, 'var(--accent)');
+  monLog('🌐 Monitor iniciado | ID: '+MON.apiMarketId+' | '+MON.apiLastEventTitle, 'var(--accent)');
+  monSt('🌐', 'Conectando...', 'ID: '+MON.apiMarketId, 'var(--accent)');
 
-    var interval = parseInt((document.getElementById('monPollInterval') || {}).value) || 3;
-    // Primeiro poll imediato
-    apiPollOnce();
-    MON.apiPollTimer = setInterval(apiPollOnce, interval * 1000);
-    MON.tickTimer    = setInterval(monTick, 1000);
+  var interval = parseInt((g('monPollInterval')||{}).value) || 3;
+  monPollOnce();
+  MON.apiPollTimer = setInterval(monPollOnce, interval * 1000);
+  MON.tickTimer    = setInterval(monTick, 1000);
+}
 
-  } else {
-    // ── MODO BOOKMARKLET ──
-    var disp2 = document.getElementById('monUrlDisplay');
-    if (disp2) { disp2.textContent = 'Aguardando bookmarklet...'; disp2.style.color = 'var(--muted)'; }
-    try {
-      MON.bc = new BroadcastChannel('sinalpro-rodovia');
-      MON.bc.onmessage = function(e) {
-        if (MON.running) monReceive(e.data);
-      };
-      monLog('📡 Canal aberto. Agora vá ao palpita.io e clique no favorito ⚡ SinalPRO Monitor', 'var(--accent)');
-      monSt('⏳', 'Aguardando scraping...', 'Clique no favorito na aba do palpita.io', 'var(--gold)');
-    } catch(e) {
-      monLog('❌ BroadcastChannel indisponível: ' + e.message, 'var(--red)');
-      monSt('❌', 'Erro', 'Use Chrome ou Edge', 'var(--red)');
-      return;
+async function monPollOnce() {
+  if (!MON.running || !MON.apiMarketId) return;
+  try {
+    var [ob, mkt] = await Promise.all([
+      palpitaGet('/orderbook?marketId='+MON.apiMarketId+'&limit=10'),
+      palpitaGet('/markets/'+MON.apiMarketId)
+    ]);
+
+    // Tempo para fechar
+    if (mkt && mkt.closesAt) {
+      var diff = Math.max(0, Math.round((new Date(mkt.closesAt) - new Date()) / 1000));
+      MON.betClosesSec = diff;
     }
-    MON.tickTimer = setInterval(monTick, 1000);
-    MON._noDataTimer = setTimeout(function() {
-      if (MON.readings.length === 0 && MON.running) {
-        monLog('⚠️ Sem dados em 20s — o bookmarklet foi ativado na aba do palpita.io?', 'var(--gold)');
-      }
-    }, 20000);
+    if (mkt && (mkt.status === 'FROZEN' || mkt.status === 'RESOLVED')) {
+      monLog('🔒 Mercado '+mkt.status, 'var(--gold)');
+      MON.betClosesSec = 0;
+    }
+
+    // Orderbook → probabilidades
+    if (!ob || !ob.selections || !ob.selections.length) {
+      monLog('⚠️ Orderbook vazio.', 'var(--gold)'); return;
+    }
+    var sels = ob.selections;
+    var s0 = sels[0], s1 = sels.length > 1 ? sels[1] : null;
+
+    function bestBid(s) { return (s && s.bids && s.bids.length) ? parseFloat(s.bids[0].price) : null; }
+    function bestAsk(s) { return (s && s.asks && s.asks.length) ? parseFloat(s.asks[0].price) : null; }
+    function bestPrice(s) { return bestBid(s) || bestAsk(s); }
+
+    var p0 = bestPrice(s0);
+    var p1 = s1 ? bestPrice(s1) : null;
+
+    // Atualiza painel de preços
+    var pricesEl = document.getElementById('monObPrices');
+    var pricesCt = document.getElementById('monObPricesContent');
+    if (pricesEl && pricesCt) {
+      pricesEl.style.display = '';
+      pricesCt.innerHTML = sels.map(function(s){
+        var bp = bestPrice(s);
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">'+
+          '<span style="font-size:12px;font-weight:700;color:var(--text);">'+(s.name||'—')+'</span>'+
+          '<span style="font-size:16px;font-weight:900;color:var(--gold);">'+(bp !== null ? (bp*100).toFixed(1)+'%' : '—')+'</span>'+
+          '</div>';
+      }).join('');
+    }
+
+    if (p0 === null) { monLog('⚠️ Sem preços no orderbook.', 'var(--gold)'); return; }
+
+    var probMais, selMaisName;
+    if (p1 !== null) {
+      var total = p0 + p1;
+      // Detecta qual é MAIS e qual é ATÉ pelo nome
+      var n0 = (s0.name||'').toLowerCase();
+      var isMais0 = n0.includes('mais') || n0.includes('over') || n0.includes('sim') || n0.includes('yes') || n0.includes('acima');
+      probMais = isMais0 ? (p0/total) : (p1/total);
+      selMaisName = isMais0 ? s0.name : (s1 ? s1.name : 'SIM');
+    } else {
+      probMais = p0;
+      selMaisName = s0.name || 'SIM';
+    }
+
+    var virtualCount = Math.round(probMais * 100);
+    MON.thresholdMais = 60;
+    MON.thresholdAte  = 40;
+
+    monLog(
+      '💹 '+selMaisName+': '+(probMais*100).toFixed(1)+'% | Aposta: '+(MON.betClosesSec != null ? MON.betClosesSec+'s' : '?')+' | Proxy: '+proxyLabel(),
+      'var(--text)'
+    );
+
+    monReceive({ id: String(MON.apiMarketId), count: virtualCount, mais: 60, ate: 40, bet: MON.betClosesSec });
+  } catch(e) {
+    monLog('❌ '+e.message, 'var(--red)');
   }
 }
 
-// ── RECEBER DADOS (Bookmarklet ou API) ────────────────────────────
 function monReceive(data) {
   if (!data || !MON.running) return;
-
-  // Novo evento detectado
-  if (data.id && data.id !== MON.eventId) {
-    var isNew = MON.eventId !== '';
-    MON.eventId   = data.id;
-    MON.eventSlug = data.slug || ('rodovia-5-minutos-qu-' + data.id);
-    MON.currentUrl = data.url || MON.currentUrl || ('https://app.palpita.io/live/' + data.id);
-    var disp = document.getElementById('monUrlDisplay');
-    if (disp) { disp.textContent = MON.currentUrl; disp.style.color = 'var(--green)'; }
-    if (isNew) {
-      monLog('🔄 Novo ciclo: ID ' + data.id, 'var(--accent)');
-      MON.readings = []; MON.signalFired = false;
-      MON.thresholdMais = null; MON.thresholdAte = null;
-      document.getElementById('monSignalCard').style.display = 'none';
-      document.getElementById('monThresholds').style.display = 'none';
-    } else {
-      monLog('✅ Evento conectado: ' + MON.eventSlug, 'var(--green)');
-      if (MON._noDataTimer) { clearTimeout(MON._noDataTimer); MON._noDataTimer = null; }
-    }
-  }
-
-  // Thresholds e tempo
   if (data.mais != null) MON.thresholdMais = Number(data.mais);
   if (data.ate  != null) MON.thresholdAte  = Number(data.ate);
   if (data.bet  != null) MON.betClosesSec  = Number(data.bet);
 
-  // Exibir preços da API (se disponível)
-  if (data._pMais != null && data._pAte != null) {
-    apiShowPrices(data._pMais, data._pAte, data._probMais);
-  }
-
-  // Contagem
   var count = data.count != null ? Number(data.count) : null;
-  if (count !== null && !isNaN(count) && count >= 0 && count < 10000) {
+  if (count !== null && !isNaN(count)) {
     MON.readings.push({ts: Date.now(), count: count});
     if (MON.readings.length > 80) MON.readings = MON.readings.slice(-80);
     monUpdateUI(count);
-    monUpdateThr();
     var proj = monProj();
     if (proj !== null) monUpdateBar(proj);
-    if (MON.mode === 'bookmarklet') {
-      monLog(
-        '🚗 ' + count + ' carros' +
-        ' | Apostas: ' + (MON.betClosesSec != null ? MON.betClosesSec : '?') + 's' +
-        ' | Proj: ' + (proj != null ? Math.round(proj) : '?') +
-        ' | #' + MON.readings.length,
-        'var(--text)'
-      );
-    }
     monCheckTrigger();
-    monSt('📡', MON.mode === 'api' ? 'API ao vivo' : 'Monitorando ao vivo',
-      MON.readings.length + ' leituras | ID: ' + MON.eventId, 'var(--green)');
-  } else if (MON.thresholdMais || MON.thresholdAte) {
-    monUpdateThr();
+    monSt('📡', 'API ao vivo', MON.readings.length+' leituras | ID: '+MON.eventId, 'var(--green)');
   }
 }
 
-// ── TICK ──────────────────────────────────────────────────────────
 function monTick() {
   if (!MON.running) return;
   if (MON.betClosesSec !== null && MON.betClosesSec > 0) MON.betClosesSec--;
@@ -1713,7 +1546,6 @@ function monTick() {
   if (MON.readings.length >= 2) monCheckTrigger();
 }
 
-// ── UI ────────────────────────────────────────────────────────────
 function monUpdateUI(count) {
   var cc = document.getElementById('monCurrentCount');
   if (cc) { cc.textContent = count; cc.style.color = monCC(count); }
@@ -1727,29 +1559,11 @@ function monUpdateUI(count) {
 }
 
 function monCC(n) {
-  if (MON.thresholdMais !== null && n > MON.thresholdMais) return 'var(--green)';
+  if (MON.thresholdMais !== null && n >= MON.thresholdMais) return 'var(--green)';
   if (MON.thresholdAte  !== null && n <= MON.thresholdAte)  return 'var(--red)';
   return 'var(--gold)';
 }
 
-function monUpdateThr() {
-  var el = document.getElementById('monThresholds');
-  if (!el) return;
-  if (MON.thresholdMais !== null || MON.thresholdAte !== null) {
-    el.style.display = '';
-    var s = function(id){ return document.getElementById(id); };
-    if (MON.thresholdMais !== null) {
-      if (s('monThresholdMais')) s('monThresholdMais').textContent = MON.thresholdMais;
-      if (s('monBarMais'))       s('monBarMais').textContent = MON.thresholdMais;
-    }
-    if (MON.thresholdAte !== null) {
-      if (s('monThresholdAte')) s('monThresholdAte').textContent = MON.thresholdAte;
-      if (s('monBarAte'))       s('monBarAte').textContent = MON.thresholdAte;
-    }
-  }
-}
-
-// ── REGRESSÃO LINEAR ──────────────────────────────────────────────
 function monProj() {
   if (MON.readings.length < 2) return MON.readings.length === 1 ? MON.readings[0].count : null;
   var r = MON.readings.slice(-20), n = r.length, now = Date.now();
@@ -1760,50 +1574,43 @@ function monProj() {
   var den = pts.reduce(function(a,p){return a+(p.x-xM)*(p.x-xM);},0);
   if (den === 0) return yM;
   var slope = num/den, intercept = yM - slope*xM;
-  return Math.max(0, intercept + slope*(MON.betClosesSec != null ? MON.betClosesSec : 60));
+  var ahead = MON.betClosesSec != null ? MON.betClosesSec : 60;
+  return Math.max(0, Math.min(100, intercept + slope*ahead));
 }
 
-// ── BARRA ─────────────────────────────────────────────────────────
 function monUpdateBar(v) {
   var bar  = document.getElementById('monProgressBar');
   var lbl  = document.getElementById('monPredLabel');
   var conf = document.getElementById('monConfLabel');
   if (!bar || !lbl) return;
-  if (MON.thresholdMais === null || MON.thresholdAte === null) {
-    lbl.textContent = 'Aguardando limites...'; return;
-  }
-  var range = Math.max(MON.thresholdMais - MON.thresholdAte, 1);
-  var pct = Math.max(5, Math.min(95, ((v - MON.thresholdAte + range) / (range*2)) * 100));
+  var pct = Math.max(5, Math.min(95, v));
   bar.style.width = pct + '%';
   var sig = monSig(v);
-  bar.style.background = sig.result === 'MAIS DE'
+  bar.style.background = sig.result === 'MAIS'
     ? 'linear-gradient(90deg,#00aa44,var(--green))'
     : 'linear-gradient(90deg,var(--red),#880000)';
-  if (sig.result) {
-    var t = sig.result === 'MAIS DE' ? MON.thresholdMais : MON.thresholdAte;
-    lbl.textContent = '→ ' + sig.result + ' ' + t + ' CARROS';
-    lbl.style.color = sig.color;
-    if (conf) conf.textContent = 'Confiança: ' + sig.confidence + '% | Projeção: ' + Math.round(v) + ' carros';
-  }
+  lbl.textContent = '→ ' + sig.result + ' (' + sig.confidence + '%)';
+  lbl.style.color = sig.color;
+  if (conf) conf.textContent = 'Confiança: '+sig.confidence+'% | Prob: '+Math.round(v)+'%';
+  // Atualiza labels da barra
+  var bm = document.getElementById('monBarMais'); if(bm) bm.textContent = MON.thresholdMais+'%';
+  var ba = document.getElementById('monBarAte');  if(ba) ba.textContent = MON.thresholdAte+'%';
 }
 
 function monSig(v) {
-  if (MON.thresholdMais === null || MON.thresholdAte === null)
-    return {result:null, confidence:0, color:'var(--muted)'};
   var mid = (MON.thresholdMais + MON.thresholdAte) / 2;
   var range = Math.max(MON.thresholdMais - MON.thresholdAte, 1);
   var dist = Math.abs(v - mid);
   var confidence = Math.min(99, Math.round(50 + (dist/(range*3))*49));
-  return v > mid
-    ? {result:'MAIS DE', confidence:confidence, color:'var(--green)'}
-    : {result:'ATÉ',     confidence:confidence, color:'var(--red)'};
+  return v >= mid
+    ? {result:'MAIS', confidence:confidence, color:'var(--green)'}
+    : {result:'ATÉ',  confidence:confidence, color:'var(--red)'};
 }
 
-// ── DISPARO ───────────────────────────────────────────────────────
 function monCheckTrigger() {
   if (MON.signalFired) return;
-  var minR    = parseInt(document.getElementById('monMinReadings').value) || 5;
-  var trigSec = parseInt(document.getElementById('monTriggerSec').value)  || 30;
+  var minR    = parseInt((document.getElementById('monMinReadings')||{}).value) || 5;
+  var trigSec = parseInt((document.getElementById('monTriggerSec') ||{}).value)  || 30;
   if (MON.readings.length < minR) return;
   if (MON.betClosesSec === null || MON.betClosesSec > trigSec) return;
   monFireSignal();
@@ -1814,101 +1621,87 @@ async function monFireSignal() {
   var proj = monProj();
   if (proj === null) { monLog('⚠️ Sem projeção.', 'var(--gold)'); return; }
   var sig = monSig(proj);
-  if (!sig.result) { monLog('⚠️ Thresholds não detectados.', 'var(--gold)'); return; }
 
-  var thr    = sig.result === 'MAIS DE' ? MON.thresholdMais : MON.thresholdAte;
-  var lbl    = sig.result === 'MAIS DE'
-    ? (MON.mode === 'api' ? '📈 MAIS PROVÁVEL' : 'MAIS DE ' + thr + ' CARROS')
-    : (MON.mode === 'api' ? '📉 MENOS PROVÁVEL' : 'ATÉ ' + thr + ' CARROS');
-  var url    = MON.currentUrl;
+  var lbl    = sig.result === 'MAIS' ? '📈 MAIS PROVÁVEL' : '📉 MENOS PROVÁVEL';
+  var titulo = sig.result === 'MAIS' ? '🔥 SINAL FORTE' : '💎 ENTRADA PREMIUM';
+  var S      = '━━━━━━━━━━━━━━━━━━━━';
   var brt    = new Date(new Date().toLocaleString('en-US',{timeZone:'America/Sao_Paulo'}));
   var ts     = brt.toLocaleString('pt-BR');
-  var titulo = sig.result === 'MAIS DE' ? '🔥 SINAL FORTE' : '💎 ENTRADA PREMIUM';
-  var S      = '━━━━━━━━━━━━━━━━━━━━';
-  var proj_r = Math.round(proj);
-  var eventName = MON.apiLastEventTitle || '🚗 Rodovia — 5 minutos';
-  var confExtra = MON.mode === 'api'
-    ? '\n__💹 Prob MAIS:__ **' + proj_r + '%**'
-    : '\n__🚗 Projeção:__ **' + proj_r + ' carros**';
+  var url    = MON.currentUrl;
+  var evName = MON.apiLastEventTitle || 'Evento';
 
   MON.signalMD =
-    '**' + titulo + ' — ' + eventName + '**\n' + S + '\n' +
-    '__🎯 Resultado:__ **' + lbl + '**\n' +
-    confExtra + '\n' +
-    '__📊 Confiança:__ **' + sig.confidence + '%**\n' +
-    '__🕒 Horário:__ ' + ts + ' BRT\n' + S + '\n' +
-    (CFG.showEntrada ? '⚡ **Entrada válida AGORA**\n' : '') +
-    (CFG.showRisk    ? '⚠️ __Palpites envolvem risco.__\n' : '') +
-    '\n👉 **LINK DO EVENTO:**\n' + url +
-    (CFG.footer ? '\n\n' + CFG.footer : '');
+    '**'+titulo+' — '+evName+'**\n'+S+'\n'+
+    '__🎯 Resultado:__ **'+lbl+'**\n'+
+    '__💹 Prob:__ **'+Math.round(proj)+'%**\n'+
+    '__📊 Confiança:__ **'+sig.confidence+'%**\n'+
+    '__🕒 Horário:__ '+ts+' BRT\n'+S+'\n'+
+    (CFG.showEntrada ? '⚡ **Entrada válida AGORA**\n' : '')+
+    (CFG.showRisk    ? '⚠️ __Palpites envolvem risco.__\n' : '')+
+    '\n👉 **LINK DO EVENTO:**\n'+url+
+    (CFG.footer ? '\n\n'+CFG.footer : '');
 
   var eH = function(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
-
   MON.signalBot =
-    '<b>' + titulo + ' — ' + eH(eventName) + '</b>\n' + S + '\n' +
-    '<u>🎯 Resultado:</u> <b>' + eH(lbl) + '</b>\n' +
-    (MON.mode === 'api'
-      ? '<u>💹 Prob MAIS:</u> <b>' + proj_r + '%</b>\n'
-      : '<u>🚗 Projeção:</u> <b>' + proj_r + ' carros</b>\n') +
-    '<u>📊 Confiança:</u> <b>' + sig.confidence + '%</b>\n' +
-    '<u>🕒 Horário:</u> ' + ts + ' BRT\n' + S + '\n' +
-    (CFG.showEntrada ? '⚡ <b>Entrada válida AGORA</b>\n' : '') +
-    (CFG.showRisk    ? '⚠️ <i>Palpites envolvem risco.</i>\n' : '') +
-    '\n👉 <b>LINK DO EVENTO:</b>\n' + eH(url) +
-    (CFG.footer ? '\n\n' + eH(CFG.footer) : '');
+    '<b>'+titulo+' — '+eH(evName)+'</b>\n'+S+'\n'+
+    '<u>🎯 Resultado:</u> <b>'+eH(lbl)+'</b>\n'+
+    '<u>💹 Prob:</u> <b>'+Math.round(proj)+'%</b>\n'+
+    '<u>📊 Confiança:</u> <b>'+sig.confidence+'%</b>\n'+
+    '<u>🕒 Horário:</u> '+ts+' BRT\n'+S+'\n'+
+    (CFG.showEntrada ? '⚡ <b>Entrada válida AGORA</b>\n' : '')+
+    (CFG.showRisk    ? '⚠️ <i>Palpites envolvem risco.</i>\n' : '')+
+    '\n👉 <b>LINK DO EVENTO:</b>\n'+eH(url)+
+    (CFG.footer ? '\n\n'+eH(CFG.footer) : '');
 
-  var sc = document.getElementById('monSignalCard');    if (sc) sc.style.display = '';
-  var sr = document.getElementById('monSignalResult');  if (sr) { sr.textContent = lbl; sr.style.color = sig.color; }
-  var sv = document.getElementById('monSignalConf');    if (sv) sv.textContent = 'Confiança: ' + sig.confidence + '% | Projeção: ' + proj_r + ' carros';
+  var sc = document.getElementById('monSignalCard');    if(sc) sc.style.display = '';
+  var sr = document.getElementById('monSignalResult');  if(sr){ sr.textContent = lbl; sr.style.color = sig.color; }
+  var sv = document.getElementById('monSignalConf');    if(sv) sv.textContent = 'Confiança: '+sig.confidence+'% | Prob: '+Math.round(proj)+'%';
 
-  monLog('🚨 SINAL: ' + lbl + ' (' + sig.confidence + '%)', sig.color);
-  showToast('🚨 ' + lbl + '!');
+  monLog('🚨 SINAL: '+lbl+' ('+sig.confidence+'%)', sig.color);
+  showToast('🚨 '+lbl+'!');
 
   try {
-    var fb = await fb_ref();
-    await fb.addDoc(fb.collection(fb.db, 'usuarios/' + uid() + '/historico'), {
-      ev:'rodovia', label:'🚗 Rodovia — Auto', resultado:lbl,
-      conf:String(sig.confidence), tg:MON.signalMD, timeStr:ts, ts:fb.serverTimestamp()
+    var fb2 = await fb_ref();
+    await fb2.addDoc(fb2.collection(fb2.db, 'usuarios/'+uid()+'/historico'), {
+      ev:'api', label:evName, resultado:lbl,
+      conf:String(sig.confidence), tg:MON.signalMD, timeStr:ts, ts:fb2.serverTimestamp()
     });
     monLog('✅ Salvo no histórico.', 'var(--green)');
-  } catch(e) { monLog('⚠️ Histórico: ' + e.message, 'var(--gold)'); }
+  } catch(e) { monLog('⚠️ Histórico: '+e.message, 'var(--gold)'); }
 
-  if (document.getElementById('monAutoSend').checked) await monSendNow();
+  if ((document.getElementById('monAutoSend')||{}).checked) await monSendNow();
 
   setTimeout(function() {
     MON.signalFired = false; MON.readings = [];
-    var sc = document.getElementById('monSignalCard'); if (sc) sc.style.display = 'none';
+    var sc2 = document.getElementById('monSignalCard'); if(sc2) sc2.style.display='none';
     monLog('🔄 Resetado para próximo ciclo.', 'var(--muted)');
   }, 120000);
 }
 
-async function fb_ref() {
-  var r = await fb();
-  return r;
-}
+async function fb_ref() { return await fb(); }
 
 async function monSendNow() {
-  if (!MON.signalBot) { showToast('⚠️ Sem sinal.', 'error'); return; }
+  if (!MON.signalBot) { showToast('⚠️ Sem sinal.','error'); return; }
   var cfg = getBotCfg(), token = cfg.token;
-  var chs = (cfg.channels || []).filter(function(c){ return c.active !== false; });
-  if (!token)    { showToast('⚠️ Configure o BOT TOKEN.', 'error'); return; }
-  if (!chs.length){ showToast('⚠️ Adicione um canal.', 'error'); return; }
-  var ok = 0, fail = 0;
-  for (var i = 0; i < chs.length; i++) {
-    try { var r = await tgSend(token, chs[i].id, MON.signalBot); if (r.ok) ok++; else fail++; }
-    catch(e) { fail++; }
+  var chs = (cfg.channels||[]).filter(function(c){ return c.active !== false; });
+  if (!token)     { showToast('⚠️ Configure o BOT TOKEN.','error'); return; }
+  if (!chs.length){ showToast('⚠️ Adicione um canal.','error'); return; }
+  var ok=0, fail=0;
+  for (var i=0;i<chs.length;i++){
+    try{ var r=await tgSend(token,chs[i].id,MON.signalBot); if(r.ok) ok++; else fail++; }
+    catch(e){ fail++; }
   }
-  monLog(ok > 0 ? '✅ Enviado para ' + ok + ' canal(is)!' : '❌ Falha.', ok > 0 ? 'var(--green)' : 'var(--red)');
-  if (ok > 0) showToast('✅ Enviado para ' + ok + ' canal(is)!');
+  monLog(ok>0 ? '✅ Enviado para '+ok+' canal(is)!' : '❌ Falha.', ok>0?'var(--green)':'var(--red)');
+  if(ok>0) showToast('✅ Enviado para '+ok+' canal(is)!');
 }
 
 function monCopySignal() {
-  if (!MON.signalMD) { showToast('⚠️ Sem sinal.', 'error'); return; }
+  if (!MON.signalMD) { showToast('⚠️ Sem sinal.','error'); return; }
   navigator.clipboard.writeText(MON.signalMD)
     .then(function(){ showToast('✅ Copiado!'); })
     .catch(function(){
-      var t = document.getElementById('_clipHelper');
-      t.value = MON.signalMD; t.select(); document.execCommand('copy');
+      var t=document.getElementById('_clipHelper');
+      t.value=MON.signalMD; t.select(); document.execCommand('copy');
       showToast('✅ Copiado!');
     });
 }
@@ -1916,30 +1709,29 @@ function monCopySignal() {
 function monitorStop(showUI) {
   if (showUI === undefined) showUI = true;
   MON.running = false;
-  if (MON.bc)           { try { MON.bc.close(); } catch(e){} MON.bc = null; }
-  if (MON.tickTimer)    { clearInterval(MON.tickTimer);   MON.tickTimer = null; }
+  if (MON.tickTimer)    { clearInterval(MON.tickTimer);    MON.tickTimer = null; }
   if (MON.apiPollTimer) { clearInterval(MON.apiPollTimer); MON.apiPollTimer = null; }
-  if (MON._noDataTimer) { clearTimeout(MON._noDataTimer); MON._noDataTimer = null; }
   if (showUI) {
-    document.getElementById('monStartBtn').style.display = '';
-    document.getElementById('monStopBtn').style.display = 'none';
-    document.getElementById('monLiveTag').style.display = 'none';
-    document.getElementById('monitorBadge').style.display = 'none';
-    monSt('⏸️', 'Monitor parado', 'Clique em Iniciar para retomar', 'var(--muted)');
+    var g = function(id){ return document.getElementById(id); };
+    g('monStartBtn').style.display = '';
+    g('monStopBtn').style.display  = 'none';
+    g('monLiveTag').style.display  = 'none';
+    g('monitorBadge').style.display = 'none';
+    monSt('⏸️', 'Monitor parado', 'Selecione um evento e clique em Iniciar', 'var(--muted)');
     monLog('■ Monitor parado.', 'var(--muted)');
   }
 }
 
-// Inicializa
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', function() {
-    monInitBookmarklet();
-    setMonMode('api');
-  });
-} else {
-  monInitBookmarklet();
-  setMonMode('api');
-}
+// ── INIT ─────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function() {
+  evStartPolling();
+});
+
+// Fecha modal ao clicar fora
+document.addEventListener('click', function(e) {
+  var modal = document.getElementById('evObModal');
+  if (modal && e.target === modal) evCloseOb();
+});
 
 </script>
 
