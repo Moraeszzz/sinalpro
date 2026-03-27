@@ -516,6 +516,48 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
     </div>
   </div>
 
+  <!-- Config Worker + Diagnóstico -->
+  <div style="margin-top:20px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 20px;">
+    <div style="font-size:13px;font-weight:800;color:var(--text);margin-bottom:4px;">🔌 Conexão com a API Palpita.io</div>
+    <div style="font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-bottom:16px;">A API requer um proxy para funcionar no browser. Configure o Cloudflare Worker abaixo.</div>
+
+    <!-- Worker URL -->
+    <div style="margin-bottom:16px;">
+      <label style="display:block;font-size:10px;font-family:var(--font-mono);color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px;">URL do Cloudflare Worker</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <input type="text" id="workerUrlInput"
+          placeholder="https://sinalpro.SEU-USUARIO.workers.dev"
+          style="flex:1;min-width:240px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:var(--font-mono);font-size:12px;padding:10px 14px;outline:none;transition:border-color .2s;"
+          onfocus="this.style.borderColor='var(--accent)'"
+          onblur="this.style.borderColor='var(--border)'">
+        <button onclick="saveWorkerUrl(document.getElementById('workerUrlInput').value);evFetch(true);"
+          style="padding:10px 20px;border-radius:10px;background:linear-gradient(135deg,var(--accent3),var(--accent));color:#fff;border:none;font-family:var(--font-head);font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap;">
+          💾 Salvar e Testar
+        </button>
+      </div>
+      <div id="workerStatus" style="margin-top:7px;font-size:11px;font-family:var(--font-mono);color:var(--muted);"></div>
+    </div>
+
+    <!-- Passo a passo -->
+    <div style="background:rgba(245,200,66,.05);border:1px solid rgba(245,200,66,.15);border-radius:10px;padding:14px 16px;margin-bottom:16px;">
+      <div style="font-size:11px;font-weight:800;color:var(--gold);margin-bottom:10px;">📋 Como criar o Worker (gratuito, 2 minutos)</div>
+      <div style="font-size:11px;font-family:var(--font-mono);color:var(--muted);line-height:2;">
+        <span style="color:var(--text);">1.</span> Acesse <span style="color:var(--accent);text-decoration:underline;cursor:pointer;" onclick="window.open('https://workers.cloudflare.com','_blank')">workers.cloudflare.com</span> → crie conta gratuita<br>
+        <span style="color:var(--text);">2.</span> Clique em <strong style="color:var(--text);">Workers & Pages → Create → Hello World → Deploy</strong><br>
+        <span style="color:var(--text);">3.</span> Clique em <strong style="color:var(--text);">Edit Code</strong> → apague tudo → cole o arquivo <strong style="color:var(--accent);">palpita-worker.js</strong><br>
+        <span style="color:var(--text);">4.</span> Clique em <strong style="color:var(--text);">Deploy</strong> → copie a URL gerada (ex: <code style="color:var(--accent);">sinalpro.seu-usuario.workers.dev</code>)<br>
+        <span style="color:var(--text);">5.</span> Cole a URL no campo acima → <strong style="color:var(--text);">Salvar e Testar</strong>
+      </div>
+    </div>
+
+    <!-- Log -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <span style="font-size:10px;font-family:var(--font-mono);color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Log de conexão</span>
+      <button onclick="evFetch(true)" style="background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.2);color:var(--accent);border-radius:6px;padding:4px 12px;font-size:10px;font-family:var(--font-mono);font-weight:700;cursor:pointer;">↺ Tentar novamente</button>
+    </div>
+    <pre id="evDiagLog" style="font-family:var(--font-mono);font-size:10px;color:var(--muted);line-height:1.8;max-height:200px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;">Aguardando...</pre>
+  </div>
+
   <!-- Orderbook Modal -->
   <div id="evObModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(4px);z-index:2000;align-items:center;justify-content:center;padding:20px;">
     <div style="background:var(--card);border:1px solid var(--border);border-radius:20px;padding:28px;max-width:600px;width:100%;max-height:90vh;overflow-y:auto;position:relative;">
@@ -1098,83 +1140,81 @@ document.addEventListener('DOMContentLoaded', function(){
 <!-- MONITOR + EVENTOS SCRIPT -->
 <script>
 // ═══════════════════════════════════════════════════════════════
-// SINALPRO v8.1 — API Palpita.io
+// SINALPRO v8.2 — API Palpita.io
 // ═══════════════════════════════════════════════════════════════
 
-// ── CREDENCIAIS ───────────────────────────────────────────────
-var _API_KEY    = 'pk_GK4RetJhwa3SVHU66xw3PY7qgKradErV';
-var _API_SECRET = 'sk_cyWfLFzQnoO6ZuvODnyrXicEUiYDlfyXfy5buUiXp9A5t5NS';
-var _API_TOKEN  = btoa(_API_KEY + ':' + _API_SECRET);
+// ── API CONFIG ───────────────────────────────────────────────
 var PALPITA_BASE = 'https://app.palpita.io/api/v1';
+var WORKER_URL   = localStorage.getItem('sinalpro_worker') || '';
+var _diagLog     = [];
+var _diagWorking = false; // true = Worker funcionando
 
-// ── PROXY CASCATA ─────────────────────────────────────────────
-// Índice 0 = chamada direta (com auth)
-// Índice 1..n = proxies públicos (sem auth — headers customizados bloqueados)
-var _proxyFns = [
-  // Sem proxy — direto com Authorization
-  null,
-  // corsproxy.io — mais confiável para GitHub Pages
-  function(u){ return 'https://corsproxy.io/?' + encodeURIComponent(u); },
-  // allorigins — retorna {contents: "..."}
-  function(u){ return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u); },
-  // codetabs
-  function(u){ return 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u); },
-];
-var _workingProxy = undefined; // undefined = ainda não sabe
+function diagAdd(msg, color) {
+  var t = new Date().toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo'});
+  _diagLog.unshift('['+t+'] '+msg);
+  if (_diagLog.length > 60) _diagLog.pop();
+  var el = document.getElementById('evDiagLog');
+  if (el) el.textContent = _diagLog.join('\n');
+}
 
+function saveWorkerUrl(url) {
+  WORKER_URL = (url||'').trim().replace(/\/$/, '');
+  localStorage.setItem('sinalpro_worker', WORKER_URL);
+  _diagWorking = false;
+  diagAdd('🔧 Worker salvo: ' + (WORKER_URL || '(vazio)'));
+  var ws = document.getElementById('workerStatus');
+  if (ws) { ws.textContent = WORKER_URL ? '✅ Salvo: '+WORKER_URL : '—'; ws.style.color = WORKER_URL ? 'var(--green)' : 'var(--muted)'; }
+}
+
+// ── FETCH PRINCIPAL ───────────────────────────────────────────
+// Estratégia: Worker (definitivo) → proxies públicos (fallback)
 async function palpitaGet(path) {
   var full = PALPITA_BASE + path;
 
-  // Ordem: começa pelo último que funcionou
-  var order = [];
-  if (_workingProxy !== undefined) order.push(_workingProxy);
-  for (var i = 0; i < _proxyFns.length; i++) {
-    if (i !== _workingProxy) order.push(i);
-  }
-
-  var errors = [];
-  for (var oi = 0; oi < order.length; oi++) {
-    var idx = order[oi];
+  // 1. Worker configurado — tenta primeiro sempre
+  if (WORKER_URL) {
     try {
-      var url, hdrs;
-      if (idx === 0) {
-        // Direto com Authorization
-        url  = full;
-        hdrs = { 'Accept': 'application/json', 'Authorization': 'Bearer ' + _API_TOKEN };
-      } else {
-        // Via proxy — sem Authorization (proxies bloqueiam headers customizados)
-        url  = _proxyFns[idx](full);
-        hdrs = { 'Accept': 'application/json' };
+      diagAdd('⏳ Worker: ' + WORKER_URL + path);
+      var r = await fetch(WORKER_URL + path, { headers:{'Accept':'application/json'} });
+      if (r.ok) {
+        var d = await r.json();
+        if (!_diagWorking) { _diagWorking = true; diagAdd('✅ Worker funcionando!'); }
+        return d;
       }
-
-      var res = await fetch(url, { method: 'GET', headers: hdrs });
-      if (!res.ok) {
-        errors.push('idx'+idx+': HTTP '+res.status);
-        if (idx === _workingProxy) _workingProxy = undefined;
-        continue;
-      }
-      var text = await res.text();
-      // allorigins embala: {"status":{"..."},"contents":"JSON aqui"}
-      if (idx > 0 && _proxyFns[idx] && _proxyFns[idx](full).includes('allorigins')) {
-        try { var w = JSON.parse(text); if (w && w.contents) text = w.contents; } catch(e){}
-      }
-      var data = JSON.parse(text);
-      _workingProxy = idx;
-      return data;
-    } catch(e) {
-      errors.push('idx'+idx+': '+e.message);
-      if (idx === _workingProxy) _workingProxy = undefined;
-    }
+      diagAdd('⚠️ Worker HTTP '+r.status+' — tentando proxies...');
+    } catch(e) { diagAdd('⚠️ Worker erro: '+e.message+' — tentando proxies...'); }
   }
-  console.error('[SinalPRO] palpitaGet falhou:', errors);
-  throw new Error('API inacessível (' + errors.slice(-1)[0] + ')');
+
+  // 2. Proxies públicos (API é pública, sem auth)
+  var proxies = [
+    { url:'https://corsproxy.io/?'+encodeURIComponent(full),                    label:'corsproxy.io' },
+    { url:'https://api.allorigins.win/raw?url='+encodeURIComponent(full),       label:'allorigins/raw' },
+    { url:'https://api.allorigins.win/get?url='+encodeURIComponent(full),       label:'allorigins/get', wrap:true },
+    { url:'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(full),  label:'codetabs' },
+  ];
+
+  for (var i = 0; i < proxies.length; i++) {
+    var p = proxies[i];
+    try {
+      diagAdd('⏳ '+p.label+'...');
+      var pr = await fetch(p.url, { headers:{'Accept':'application/json'} });
+      if (!pr.ok) { diagAdd('❌ '+p.label+': HTTP '+pr.status); continue; }
+      var txt = await pr.text();
+      if (p.wrap) { try { var w=JSON.parse(txt); if(w.contents) txt=w.contents; } catch(e){} }
+      var data = JSON.parse(txt);
+      diagAdd('✅ '+p.label+' funcionou!');
+      return data;
+    } catch(e) { diagAdd('❌ '+p.label+': '+e.message); }
+  }
+
+  var msg = WORKER_URL
+    ? 'Worker não respondeu e todos os proxies falharam. Verifique a URL do Worker.'
+    : 'Configure o Cloudflare Worker abaixo para resolver o CORS.';
+  diagAdd('🔴 '+msg);
+  throw new Error(msg);
 }
 
-function proxyLabel() {
-  if (_workingProxy === undefined) return '?';
-  if (_workingProxy === 0) return 'direto ✓';
-  return 'proxy #' + _workingProxy + ' ✓';
-}
+function proxyLabel() { return _diagWorking ? 'worker ⚡' : 'proxy'; }
 
 // ── PARSE RESPONSE ────────────────────────────────────────────
 function parseItems(data) {
@@ -1772,7 +1812,14 @@ function monitorStop(showUI) {
 
 // ── INIT ─────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function() {
-  // Inicia polling de eventos imediatamente ao carregar
+  // Restaura Worker URL salvo
+  var saved = localStorage.getItem('sinalpro_worker') || '';
+  var inp = document.getElementById('workerUrlInput');
+  if (inp && saved) { inp.value = saved; inp.style.borderColor = 'var(--green)'; }
+  if (saved) {
+    var ws = document.getElementById('workerStatus');
+    if (ws) ws.textContent = '✅ Worker configurado: ' + saved;
+  }
   evStartPolling();
 });
 
