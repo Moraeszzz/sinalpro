@@ -473,7 +473,7 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
   <div style="margin:4px 0 20px;display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;">
     <div>
       <h2 style="font-size:18px;font-weight:800;">🚗 Monitor Automático — Rodovia</h2>
-      <p style="font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-top:4px;">Scraping direto do palpita.io via bookmarklet — dados em tempo real</p>
+      <p style="font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-top:4px;" id="monSubtitle">API Palpita.io + Bookmarklet — dados em tempo real</p>
     </div>
     <div style="display:flex;gap:8px;align-items:center;">
       <div id="monLiveTag" style="display:none;background:rgba(255,61,90,.15);border:1px solid rgba(255,61,90,.4);color:var(--red);padding:5px 14px;border-radius:100px;font-size:11px;font-family:var(--font-mono);font-weight:700;animation:pulse 1s infinite;">● AO VIVO</div>
@@ -482,26 +482,78 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
     </div>
   </div>
 
-  <!-- BOOKMARKLET BANNER -->
-  <div style="background:linear-gradient(135deg,rgba(124,58,237,.15),rgba(0,212,255,.1));border:1px solid rgba(124,58,237,.4);border-radius:16px;padding:22px 24px;margin-bottom:20px;">
-    <div style="font-size:14px;font-weight:800;color:#a78bfa;margin-bottom:10px;">📎 Passo 1 — Instalar o Bookmarklet (faça uma vez)</div>
-    <div style="font-size:12px;color:var(--muted);font-family:var(--font-mono);line-height:1.9;margin-bottom:16px;">
-      Arraste o botão abaixo para a <strong style="color:var(--text);">barra de favoritos</strong> do Chrome.<br>
-      Não aparece a barra? Pressione <strong style="color:var(--text);">Ctrl+Shift+B</strong>.
+  <!-- MODO SELECTOR -->
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 20px;margin-bottom:20px;">
+    <div style="font-size:10px;font-family:var(--font-mono);letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:14px;">🔌 Modo de Monitoramento</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button id="modeApiBtn" onclick="setMonMode('api')" style="flex:1;min-width:160px;padding:14px 16px;border-radius:12px;border:2px solid var(--accent);background:rgba(0,212,255,.1);color:var(--accent);font-family:var(--font-head);font-size:13px;font-weight:800;cursor:pointer;transition:all .2s;">
+        🌐 Modo API <span style="display:block;font-size:10px;font-family:var(--font-mono);font-weight:400;color:var(--muted);margin-top:3px;">Direto via API Palpita.io</span>
+      </button>
+      <button id="modeBmkBtn" onclick="setMonMode('bookmarklet')" style="flex:1;min-width:160px;padding:14px 16px;border-radius:12px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:var(--font-head);font-size:13px;font-weight:800;cursor:pointer;transition:all .2s;">
+        📎 Modo Bookmarklet <span style="display:block;font-size:10px;font-family:var(--font-mono);font-weight:400;margin-top:3px;">Scraping via favorito</span>
+      </button>
     </div>
-    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
-      <a id="monBookmarklet" href="#"
-         style="background:linear-gradient(135deg,#7c3aed,#00d4ff);color:#fff;padding:12px 22px;border-radius:12px;font-family:var(--font-head);font-size:14px;font-weight:800;text-decoration:none;cursor:grab;white-space:nowrap;box-shadow:0 4px 20px rgba(124,58,237,.4);"
-         onclick="return false;">
-        ⚡ SinalPRO Monitor
-      </a>
-      <span style="font-size:11px;color:var(--muted);font-family:var(--font-mono);">← arraste para a barra de favoritos</span>
+  </div>
+
+  <!-- MODO API PANEL -->
+  <div id="panelApi" style="margin-bottom:20px;">
+    <div style="background:linear-gradient(135deg,rgba(0,212,255,.1),rgba(124,58,237,.08));border:1px solid rgba(0,212,255,.3);border-radius:16px;padding:22px 24px;margin-bottom:20px;">
+      <div style="font-size:14px;font-weight:800;color:var(--accent);margin-bottom:12px;">🌐 Integração via API Oficial Palpita.io</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+        <div class="field" style="margin:0;">
+          <label>API Key (pk_...)</label>
+          <input type="text" id="apiKeyInput" class="cfg-input" placeholder="pk_xxxxxxxxxxxxxxxx" style="font-family:var(--font-mono);font-size:12px;">
+        </div>
+        <div class="field" style="margin:0;">
+          <label>API Secret (sk_...)</label>
+          <input type="password" id="apiSecretInput" class="cfg-input" placeholder="sk_xxxxxxxxxxxxxxxx" style="font-family:var(--font-mono);font-size:12px;">
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+        <div class="field" style="margin:0;flex:1;min-width:200px;">
+          <label>Buscar Evento Rodovia</label>
+          <input type="text" id="apiSearchInput" class="cfg-input" placeholder="Ex: rodovia, 5 minutos..." style="font-family:var(--font-mono);font-size:12px;" oninput="apiSearchDebounce()">
+        </div>
+        <button onclick="apiFetchMarkets()" style="padding:10px 18px;border-radius:10px;border:1px solid var(--accent);background:rgba(0,212,255,.1);color:var(--accent);font-family:var(--font-head);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">🔍 Buscar</button>
+      </div>
+      <!-- Market results -->
+      <div id="apiMarketList" style="margin-top:12px;max-height:180px;overflow-y:auto;display:none;">
+        <div style="font-size:10px;font-family:var(--font-mono);color:var(--muted);margin-bottom:8px;letter-spacing:1px;">EVENTOS ABERTOS — clique para selecionar</div>
+        <div id="apiMarketItems"></div>
+      </div>
+      <!-- Selected market -->
+      <div id="apiSelectedMarket" style="display:none;margin-top:12px;background:rgba(0,230,118,.07);border:1px solid rgba(0,230,118,.25);border-radius:10px;padding:12px 14px;">
+        <div style="font-size:10px;font-weight:700;color:var(--green);margin-bottom:4px;">✅ EVENTO SELECIONADO</div>
+        <div id="apiMarketTitle" style="font-size:13px;font-weight:800;color:var(--text);"></div>
+        <div id="apiMarketMeta" style="font-size:10px;font-family:var(--font-mono);color:var(--muted);margin-top:3px;"></div>
+        <div id="apiSelectionsWrap" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;"></div>
+      </div>
+      <div id="apiStatusMsg" style="margin-top:10px;font-size:11px;font-family:var(--font-mono);color:var(--muted);"></div>
     </div>
-    <div style="margin-top:14px;font-size:11px;color:var(--muted);font-family:var(--font-mono);line-height:1.9;">
-      <strong style="color:var(--text);">Passo 2:</strong> Clique em <strong style="color:var(--green);">▶ Iniciar Monitor</strong> nesta aba<br>
-      <strong style="color:var(--text);">Passo 3:</strong> Vá para a aba do <strong style="color:var(--text);">palpita.io</strong> com o evento de Rodovia<br>
-      <strong style="color:var(--text);">Passo 4:</strong> Clique no favorito <strong style="color:#a78bfa;">⚡ SinalPRO Monitor</strong> na barra<br>
-      <strong style="color:var(--text);">Passo 5:</strong> Volte para esta aba — dados chegam automaticamente ✅
+  </div>
+
+  <!-- MODO BOOKMARKLET PANEL -->
+  <div id="panelBmk" style="display:none;margin-bottom:20px;">
+    <div style="background:linear-gradient(135deg,rgba(124,58,237,.15),rgba(0,212,255,.1));border:1px solid rgba(124,58,237,.4);border-radius:16px;padding:22px 24px;">
+      <div style="font-size:14px;font-weight:800;color:#a78bfa;margin-bottom:10px;">📎 Passo 1 — Instalar o Bookmarklet (faça uma vez)</div>
+      <div style="font-size:12px;color:var(--muted);font-family:var(--font-mono);line-height:1.9;margin-bottom:16px;">
+        Arraste o botão abaixo para a <strong style="color:var(--text);">barra de favoritos</strong> do Chrome.<br>
+        Não aparece a barra? Pressione <strong style="color:var(--text);">Ctrl+Shift+B</strong>.
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+        <a id="monBookmarklet" href="#"
+           style="background:linear-gradient(135deg,#7c3aed,#00d4ff);color:#fff;padding:12px 22px;border-radius:12px;font-family:var(--font-head);font-size:14px;font-weight:800;text-decoration:none;cursor:grab;white-space:nowrap;box-shadow:0 4px 20px rgba(124,58,237,.4);"
+           onclick="return false;">
+          ⚡ SinalPRO Monitor
+        </a>
+        <span style="font-size:11px;color:var(--muted);font-family:var(--font-mono);">← arraste para a barra de favoritos</span>
+      </div>
+      <div style="margin-top:14px;font-size:11px;color:var(--muted);font-family:var(--font-mono);line-height:1.9;">
+        <strong style="color:var(--text);">Passo 2:</strong> Clique em <strong style="color:var(--green);">▶ Iniciar Monitor</strong> nesta aba<br>
+        <strong style="color:var(--text);">Passo 3:</strong> Vá para a aba do <strong style="color:var(--text);">palpita.io</strong> com o evento de Rodovia<br>
+        <strong style="color:var(--text);">Passo 4:</strong> Clique no favorito <strong style="color:#a78bfa;">⚡ SinalPRO Monitor</strong> na barra<br>
+        <strong style="color:var(--text);">Passo 5:</strong> Volte para esta aba — dados chegam automaticamente ✅
+      </div>
     </div>
   </div>
 
@@ -510,7 +562,7 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
       <div class="card-title">⚙ Configuração</div>
       <div style="background:rgba(0,230,118,.06);border:1px solid rgba(0,230,118,.2);border-radius:10px;padding:12px 14px;margin-bottom:14px;">
         <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:4px;">📡 Evento Monitorado</div>
-        <div id="monUrlDisplay" style="font-size:11px;font-family:var(--font-mono);color:var(--muted);word-break:break-all;">Aguardando bookmarklet...</div>
+        <div id="monUrlDisplay" style="font-size:11px;font-family:var(--font-mono);color:var(--muted);word-break:break-all;">Aguardando...</div>
       </div>
       <div class="field">
         <label>Disparar sinal quando faltar (segundos)</label>
@@ -519,6 +571,10 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
       <div class="field">
         <label>Mínimo de leituras para disparar</label>
         <input type="number" id="monMinReadings" value="5" min="2" max="30" style="font-family:var(--font-mono);">
+      </div>
+      <div class="field">
+        <label>Intervalo de polling API (segundos)</label>
+        <input type="number" id="monPollInterval" value="3" min="2" max="15" style="font-family:var(--font-mono);">
       </div>
       <div style="display:flex;gap:10px;align-items:center;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px;">
         <div style="flex:1;">
@@ -1058,28 +1114,273 @@ document.addEventListener('DOMContentLoaded', function(){
 <!-- MONITOR SCRIPT -->
 <script>
 // ═══════════════════════════════════════════════════════════════
-// MONITOR AUTOMÁTICO — RODOVIA PALPITA.IO  v6.0
-// SCRAPING via Bookmarklet + BroadcastChannel
-//
-// O bookmarklet roda DENTRO do palpita.io (sem CORS)
-// e envia dados via BroadcastChannel para esta aba.
+// MONITOR AUTOMÁTICO — RODOVIA PALPITA.IO  v7.0
+// MODO API (Palpita.io API oficial) + MODO BOOKMARKLET
 // ═══════════════════════════════════════════════════════════════
 
 const MON = {
-  bc: null, tickTimer: null,
+  bc: null, tickTimer: null, apiTimer: null,
   readings: [],
   thresholdMais: null, thresholdAte: null,
   betClosesSec: null,
   signalFired: false,
   signalMD: '', signalBot: '',
   running: false,
+  mode: 'api', // 'api' | 'bookmarklet'
   eventId: '', eventSlug: '', currentUrl: '',
+  // API state
+  apiMarketId: null, apiSelectionId: null, apiMarketTitle: '',
+  apiOrderbook: null,
 };
 
+// ── API HELPERS ───────────────────────────────────────────────────
+function apiGetToken() {
+  var k = document.getElementById('apiKeyInput').value.trim();
+  var s = document.getElementById('apiSecretInput').value.trim();
+  if (!k || !s) return null;
+  return btoa(k + ':' + s);
+}
+
+function apiHeaders() {
+  var t = apiGetToken();
+  var h = { 'Accept': 'application/json', 'Content-Type': 'application/json' };
+  if (t) h['Authorization'] = 'Bearer ' + t;
+  return h;
+}
+
+var _apiSearchTimer = null;
+function apiSearchDebounce() {
+  clearTimeout(_apiSearchTimer);
+  _apiSearchTimer = setTimeout(apiFetchMarkets, 600);
+}
+
+async function apiFetchMarkets() {
+  var q = (document.getElementById('apiSearchInput').value || 'rodovia').trim();
+  var msg = document.getElementById('apiStatusMsg');
+  var list = document.getElementById('apiMarketList');
+  if (msg) msg.textContent = '⏳ Buscando eventos...';
+  if (list) list.style.display = 'none';
+  try {
+    var url = 'https://app.palpita.io/api/v1/markets?status=OPEN&limit=20&search=' + encodeURIComponent(q) + '&orderBy=closesAt&orderDirection=ASC';
+    var res = await fetch(url, { headers: apiHeaders() });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var data = await res.json();
+    var items = data.items || data || [];
+    if (!Array.isArray(items)) items = [];
+    renderApiMarkets(items);
+    if (msg) msg.textContent = items.length ? '✅ ' + items.length + ' evento(s) encontrado(s)' : '⚠️ Nenhum evento aberto encontrado.';
+  } catch(e) {
+    if (msg) msg.textContent = '❌ Erro: ' + e.message + ' — verifique CORS ou credenciais.';
+    monLog('❌ API erro: ' + e.message, 'var(--red)');
+  }
+}
+
+function renderApiMarkets(items) {
+  var wrap = document.getElementById('apiMarketItems');
+  var list = document.getElementById('apiMarketList');
+  if (!wrap || !list) return;
+  if (!items.length) { list.style.display = 'none'; return; }
+  wrap.innerHTML = items.map(function(m) {
+    var closes = m.closesAt ? new Date(m.closesAt).toLocaleString('pt-BR', {timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+    var sels = (m.selections || []).map(function(s){ return s.name; }).join(' / ');
+    return '<div onclick="apiSelectMarket(' + m.id + ',\'' + esc(m.title||m.slug) + '\',' + JSON.stringify(m.selections||[]) + ',\'' + esc(m.slug) + '\')" style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;border-radius:8px;" onmouseover="this.style.background=\'rgba(0,212,255,.08)\'" onmouseout="this.style.background=\'transparent\'">'
+      + '<div style="font-size:12px;font-weight:700;color:var(--text);">' + esc(m.title||m.slug) + '</div>'
+      + '<div style="font-size:10px;color:var(--muted);font-family:var(--font-mono);margin-top:2px;">ID:' + m.id + ' | Fecha: ' + closes + ' | ' + esc(sels) + '</div>'
+      + '</div>';
+  }).join('');
+  list.style.display = '';
+}
+
+function apiSelectMarket(id, title, selections, slug) {
+  MON.apiMarketId = id;
+  MON.apiMarketTitle = title;
+  MON.eventId = String(id);
+  MON.eventSlug = slug || ('market-' + id);
+  MON.currentUrl = 'https://app.palpita.io/live/' + id + '-market/' + MON.eventSlug;
+
+  document.getElementById('apiMarketList').style.display = 'none';
+  document.getElementById('apiSelectedMarket').style.display = '';
+  document.getElementById('apiMarketTitle').textContent = title;
+  document.getElementById('apiMarketMeta').textContent = 'ID: ' + id + ' | ' + (selections.length) + ' seleção(ões)';
+
+  // Render selection buttons
+  var sw = document.getElementById('apiSelectionsWrap');
+  sw.innerHTML = '';
+  // Auto-select first selection, allow manual override
+  if (selections.length > 0) {
+    MON.apiSelectionId = selections[0].id;
+    selections.forEach(function(s, i) {
+      var btn = document.createElement('button');
+      btn.textContent = s.name;
+      btn.style.cssText = 'padding:6px 14px;border-radius:8px;border:1px solid ' + (i===0?'var(--accent)':'var(--border)') + ';background:' + (i===0?'rgba(0,212,255,.1)':'var(--bg)') + ';color:' + (i===0?'var(--accent)':'var(--muted)') + ';font-family:var(--font-head);font-size:11px;font-weight:700;cursor:pointer;transition:all .2s;';
+      btn.onclick = function() {
+        MON.apiSelectionId = s.id;
+        sw.querySelectorAll('button').forEach(function(b){ b.style.borderColor='var(--border)'; b.style.background='var(--bg)'; b.style.color='var(--muted)'; });
+        btn.style.borderColor='var(--accent)'; btn.style.background='rgba(0,212,255,.1)'; btn.style.color='var(--accent)';
+      };
+      sw.appendChild(btn);
+    });
+  }
+
+  var disp = document.getElementById('monUrlDisplay');
+  if (disp) { disp.textContent = MON.currentUrl; disp.style.color = 'var(--green)'; }
+  document.getElementById('apiStatusMsg').textContent = '✅ Pronto! Clique em ▶ Iniciar Monitor.';
+  monLog('✅ Evento selecionado: ' + title + ' (ID ' + id + ')', 'var(--green)');
+}
+
+// ── API POLLING ───────────────────────────────────────────────────
+async function apiPoll() {
+  if (!MON.running || MON.mode !== 'api') return;
+  if (!MON.apiMarketId) { monLog('⚠️ Selecione um evento primeiro.', 'var(--gold)'); return; }
+
+  try {
+    // 1. Fetch market details (closesAt = tempo restante proxy)
+    var mUrl = 'https://app.palpita.io/api/v1/markets/' + MON.apiMarketId;
+    var mRes = await fetch(mUrl, { headers: apiHeaders() });
+    if (!mRes.ok) throw new Error('Market HTTP ' + mRes.status);
+    var mData = await mRes.json();
+
+    // Compute seconds until closesAt
+    if (mData.closesAt) {
+      var diff = Math.round((new Date(mData.closesAt) - Date.now()) / 1000);
+      MON.betClosesSec = Math.max(0, diff);
+    }
+
+    // Market status check
+    if (mData.status && mData.status !== 'OPEN') {
+      monLog('🔒 Mercado ' + mData.status + ' — aguardando próximo ciclo...', 'var(--gold)');
+      return;
+    }
+
+    // 2. Fetch orderbook
+    var obUrl = 'https://app.palpita.io/api/v1/orderbook?marketId=' + MON.apiMarketId + '&limit=10';
+    var obRes = await fetch(obUrl, { headers: apiHeaders() });
+    if (!obRes.ok) throw new Error('Orderbook HTTP ' + obRes.status);
+    var obData = await obRes.json();
+
+    // Process orderbook to extract "count" proxy via best bid prices
+    processOrderbook(obData, mData);
+
+  } catch(e) {
+    monLog('❌ API poll: ' + e.message, 'var(--red)');
+  }
+}
+
+function processOrderbook(ob, market) {
+  if (!ob || !ob.selections || !ob.selections.length) return;
+
+  // Find the target selection (user-selected or first)
+  var targetSel = null;
+  if (MON.apiSelectionId) {
+    targetSel = ob.selections.find(function(s){ return s.selectionId === MON.apiSelectionId; });
+  }
+  if (!targetSel) targetSel = ob.selections[0];
+  if (!targetSel) return;
+
+  // Best bid price = probability the market assigns to this outcome
+  // For Rodovia: "MAIS DE X carros" → we treat best bid as market's implied probability
+  var bestBid = null, bestAsk = null;
+  if (targetSel.bids && targetSel.bids.length > 0) bestBid = parseFloat(targetSel.bids[0].price);
+  if (targetSel.asks && targetSel.asks.length > 0) bestAsk = parseFloat(targetSel.asks[0].price);
+
+  // Mid price as probability (0-1)
+  var mid = null;
+  if (bestBid !== null && bestAsk !== null) mid = (bestBid + bestAsk) / 2;
+  else if (bestBid !== null) mid = bestBid;
+  else if (bestAsk !== null) mid = bestAsk;
+
+  // Extract thresholds from selection names
+  // Expected names like "Mais de 150" / "Até 150" or similar
+  ob.selections.forEach(function(s) {
+    if (!s.name) return;
+    var maisM = s.name.match(/[Mm]ais\s+de\s+(\d+)/);
+    if (maisM) MON.thresholdMais = parseInt(maisM[1]);
+    var ateM = s.name.match(/[Aa]t[ée]\s+(\d+)/);
+    if (ateM) MON.thresholdAte = parseInt(ateM[1]);
+  });
+
+  // Build a "count" proxy:
+  // If we have thresholds, use mid price * (thresholdMais - thresholdAte) + thresholdAte
+  // Otherwise use mid price * 200 as a raw proxy
+  var count = null;
+  if (mid !== null) {
+    if (MON.thresholdMais !== null && MON.thresholdAte !== null) {
+      // Scale mid into the threshold range
+      count = Math.round(MON.thresholdAte + mid * (MON.thresholdMais - MON.thresholdAte + MON.thresholdMais * 0.1));
+    } else {
+      count = Math.round(mid * 300);
+    }
+  }
+
+  // Build extra info log
+  var bidQty  = targetSel.bids && targetSel.bids[0] ? targetSel.bids[0].quantity : '—';
+  var askQty  = targetSel.asks && targetSel.asks[0] ? targetSel.asks[0].quantity : '—';
+  var prob    = mid !== null ? Math.round(mid * 100) : '?';
+
+  // Detect if new market cycle (market ID changed)
+  if (market && String(market.id) !== MON.eventId) {
+    MON.eventId = String(market.id);
+    MON.readings = []; MON.signalFired = false;
+    monLog('🔄 Novo ciclo detectado: ID ' + market.id, 'var(--accent)');
+  }
+
+  if (count !== null && !isNaN(count)) {
+    MON.readings.push({ ts: Date.now(), count: count });
+    if (MON.readings.length > 80) MON.readings = MON.readings.slice(-80);
+    monUpdateUI(count);
+    monUpdateThr();
+    var proj = monProj();
+    if (proj !== null) monUpdateBar(proj);
+    monLog(
+      '📊 ' + (targetSel.name || 'Sel') +
+      ' | Bid: ' + (bestBid !== null ? bestBid.toFixed(3) : '—') + ' (x' + bidQty + ')' +
+      ' | Ask: ' + (bestAsk !== null ? bestAsk.toFixed(3) : '—') + ' (x' + askQty + ')' +
+      ' | Prob: ' + prob + '%' +
+      ' | Proxy carros: ' + count +
+      ' | Apostas: ' + (MON.betClosesSec !== null ? MON.betClosesSec + 's' : '?') +
+      ' | Proj: ' + (proj !== null ? Math.round(proj) : '?') +
+      ' | #' + MON.readings.length,
+      'var(--text)'
+    );
+    monCheckTrigger();
+    monSt('📡', 'API ao vivo', MON.readings.length + ' leituras | ID: ' + MON.eventId, 'var(--green)');
+  }
+}
+
+// ── MODO SELECTOR ─────────────────────────────────────────────────
+function setMonMode(mode) {
+  MON.mode = mode;
+  var apiBtn  = document.getElementById('modeApiBtn');
+  var bmkBtn  = document.getElementById('modeBmkBtn');
+  var panelApi = document.getElementById('panelApi');
+  var panelBmk = document.getElementById('panelBmk');
+  var subtitle = document.getElementById('monSubtitle');
+
+  if (mode === 'api') {
+    apiBtn.style.border = '2px solid var(--accent)';
+    apiBtn.style.background = 'rgba(0,212,255,.1)';
+    apiBtn.style.color = 'var(--accent)';
+    bmkBtn.style.border = '1px solid var(--border)';
+    bmkBtn.style.background = 'transparent';
+    bmkBtn.style.color = 'var(--muted)';
+    if (panelApi) panelApi.style.display = '';
+    if (panelBmk) panelBmk.style.display = 'none';
+    if (subtitle) subtitle.textContent = 'Modo API — dados direto da Palpita.io sem bookmarklet';
+  } else {
+    bmkBtn.style.border = '2px solid var(--accent3)';
+    bmkBtn.style.background = 'rgba(124,58,237,.1)';
+    bmkBtn.style.color = '#a78bfa';
+    apiBtn.style.border = '1px solid var(--border)';
+    apiBtn.style.background = 'transparent';
+    apiBtn.style.color = 'var(--muted)';
+    if (panelBmk) panelBmk.style.display = '';
+    if (panelApi) panelApi.style.display = 'none';
+    if (subtitle) subtitle.textContent = 'Modo Bookmarklet — scraping via favorito do Chrome';
+  }
+}
+
 // ── BOOKMARKLET ───────────────────────────────────────────────────
-// Este código vai rodar no contexto do palpita.io quando clicado
 function monBuildBookmarklet() {
-  // Construído como string para evitar qualquer problema de escape
   var parts = [
     '(function(){',
     'var CH="sinalpro-rodovia";',
@@ -1087,22 +1388,16 @@ function monBuildBookmarklet() {
     'var bc=new BroadcastChannel(CH);',
     'function scrape(){',
     '  var d={ts:Date.now()};',
-    // URL -> eventId
     '  var sm=location.href.match(/rodovia-5-minutos-qu-(\\d+)/);',
     '  if(sm){d.id=sm[1];d.slug="rodovia-5-minutos-qu-"+sm[1];d.url=location.href;}',
-    // Texto completo da página
     '  var txt=document.body.innerText||"";',
-    // Contagem: número após "CONTAGEM ATUAL"
     '  var cm=txt.match(/CONTAGEM[\\s\\S]{0,20}?\\n(\\d{1,4})\\n/i)||txt.match(/^(\\d{1,4})$/m);',
     '  if(cm)d.count=parseInt(cm[1]);',
-    // Tempo apostas: "01:42" perto de ENCERRAM
     '  var tm=txt.match(/ENCERRAM[\\s\\S]{0,20}?(\\d{1,2}):(\\d{2})/i);',
     '  if(tm)d.bet=parseInt(tm[1])*60+parseInt(tm[2]);',
     '  if(/encerradas/i.test(txt))d.bet=0;',
-    // Thresholds
     '  var mm=txt.match(/[Mm]ais\\s+de\\s+(\\d+)/);if(mm)d.mais=parseInt(mm[1]);',
     '  var am=txt.match(/[Aa]t[\\u00e9e]\\s+(\\d+)/);if(am)d.ate=parseInt(am[1]);',
-    // __NEXT_DATA__ JSON (mais preciso)
     '  var nd=document.getElementById("__NEXT_DATA__");',
     '  if(nd){try{',
     '    var j=nd.textContent;',
@@ -1112,7 +1407,6 @@ function monBuildBookmarklet() {
     '    var ao=j.match(/"ate":(\\d+)/)||j.match(/"threshold_ate":(\\d+)/);if(ao)d.ate=parseInt(ao[1]);',
     '  }catch(e){}}',
     '  bc.postMessage(d);',
-    // Badge visual
     '  var fb=document.getElementById("_sp_badge");',
     '  if(!fb){fb=document.createElement("div");fb.id="_sp_badge";',
     '  fb.style="position:fixed;bottom:16px;right:16px;background:#7c3aed;color:#fff;padding:8px 16px;border-radius:100px;font-size:12px;font-weight:700;z-index:99999;font-family:monospace;";',
@@ -1121,7 +1415,6 @@ function monBuildBookmarklet() {
     '}',
     'scrape();',
     'window._sp=setInterval(scrape,2000);',
-    // Toast de confirmação
     'var t=document.createElement("div");',
     't.style="position:fixed;top:20px;right:20px;background:#00e676;color:#000;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:700;z-index:99999;";',
     't.textContent="✅ SinalPRO ativado!";',
@@ -1177,45 +1470,58 @@ function monitorStart() {
   MON.readings = []; MON.signalFired = false;
   MON.thresholdMais = null; MON.thresholdAte = null;
   MON.betClosesSec = null;
-  MON.eventId = ''; MON.eventSlug = ''; MON.currentUrl = '';
 
   document.getElementById('monStartBtn').style.display = 'none';
   document.getElementById('monStopBtn').style.display = '';
   document.getElementById('monLiveTag').style.display = '';
   document.getElementById('monitorBadge').style.display = '';
   document.getElementById('monSignalCard').style.display = 'none';
-  var disp = document.getElementById('monUrlDisplay');
-  if (disp) { disp.textContent = 'Aguardando bookmarklet...'; disp.style.color = 'var(--muted)'; }
 
-  // Abre canal de comunicação com o bookmarklet
-  try {
-    MON.bc = new BroadcastChannel('sinalpro-rodovia');
-    MON.bc.onmessage = function(e) {
-      if (MON.running) monReceive(e.data);
-    };
-    monLog('📡 Canal aberto. Agora vá ao palpita.io e clique no favorito ⚡ SinalPRO Monitor', 'var(--accent)');
-    monSt('⏳', 'Aguardando scraping...', 'Clique no favorito na aba do palpita.io', 'var(--gold)');
-  } catch(e) {
-    monLog('❌ BroadcastChannel indisponível: ' + e.message, 'var(--red)');
-    monSt('❌', 'Erro', 'Use Chrome ou Edge', 'var(--red)');
-    return;
+  if (MON.mode === 'api') {
+    // API mode
+    if (!MON.apiMarketId) {
+      showToast('⚠️ Selecione um evento na API primeiro!', 'error');
+      monLog('⚠️ Nenhum evento selecionado.', 'var(--red)');
+      monitorStop(true);
+      return;
+    }
+    var interval = (parseInt(document.getElementById('monPollInterval').value) || 3) * 1000;
+    monLog('🌐 Modo API — polling a cada ' + (interval/1000) + 's | Mercado ID: ' + MON.apiMarketId, 'var(--accent)');
+    monSt('⏳', 'Conectando via API...', 'Buscando dados...', 'var(--gold)');
+    apiPoll(); // first immediate poll
+    MON.apiTimer = setInterval(apiPoll, interval);
+  } else {
+    // Bookmarklet mode
+    if (!MON.eventId) {
+      MON.eventId = ''; MON.eventSlug = ''; MON.currentUrl = '';
+      var disp = document.getElementById('monUrlDisplay');
+      if (disp) { disp.textContent = 'Aguardando bookmarklet...'; disp.style.color = 'var(--muted)'; }
+    }
+    try {
+      MON.bc = new BroadcastChannel('sinalpro-rodovia');
+      MON.bc.onmessage = function(e) { if (MON.running) monReceive(e.data); };
+      monLog('📡 Canal aberto. Vá ao palpita.io e clique no favorito ⚡ SinalPRO Monitor', 'var(--accent)');
+      monSt('⏳', 'Aguardando scraping...', 'Clique no favorito na aba do palpita.io', 'var(--gold)');
+    } catch(e) {
+      monLog('❌ BroadcastChannel indisponível: ' + e.message, 'var(--red)');
+      monSt('❌', 'Erro', 'Use Chrome ou Edge', 'var(--red)');
+      monitorStop(true);
+      return;
+    }
+    MON._noDataTimer = setTimeout(function() {
+      if (MON.readings.length === 0 && MON.running) {
+        monLog('⚠️ Sem dados em 20s — o bookmarklet foi ativado na aba do palpita.io?', 'var(--gold)');
+      }
+    }, 20000);
   }
 
   MON.tickTimer = setInterval(monTick, 1000);
-
-  // Aviso se não receber dados em 20s
-  MON._noDataTimer = setTimeout(function() {
-    if (MON.readings.length === 0 && MON.running) {
-      monLog('⚠️ Sem dados em 20s — o bookmarklet foi ativado na aba do palpita.io?', 'var(--gold)');
-    }
-  }, 20000);
 }
 
 // ── RECEBER DADOS DO BOOKMARKLET ──────────────────────────────────
 function monReceive(data) {
   if (!data || !MON.running) return;
 
-  // Novo evento detectado
   if (data.id && data.id !== MON.eventId) {
     var isNew = MON.eventId !== '';
     MON.eventId   = data.id;
@@ -1235,12 +1541,10 @@ function monReceive(data) {
     }
   }
 
-  // Thresholds e tempo
   if (data.mais != null) MON.thresholdMais = Number(data.mais);
   if (data.ate  != null) MON.thresholdAte  = Number(data.ate);
   if (data.bet  != null) MON.betClosesSec  = Number(data.bet);
 
-  // Contagem
   var count = data.count != null ? Number(data.count) : null;
   if (count !== null && !isNaN(count) && count >= 0 && count < 10000) {
     MON.readings.push({ts: Date.now(), count: count});
@@ -1386,6 +1690,7 @@ async function monFireSignal() {
   var titulo = sig.result === 'MAIS DE' ? '🔥 SINAL FORTE' : '💎 ENTRADA PREMIUM';
   var S      = '━━━━━━━━━━━━━━━━━━━━';
   var proj_r = Math.round(proj);
+  var modeTag = MON.mode === 'api' ? ' [API]' : ' [Bookmarklet]';
 
   MON.signalMD =
     '**' + titulo + ' — 🚗 Rodovia — 5 minutos**\n' + S + '\n' +
@@ -1413,15 +1718,15 @@ async function monFireSignal() {
 
   var sc = document.getElementById('monSignalCard');    if (sc) sc.style.display = '';
   var sr = document.getElementById('monSignalResult');  if (sr) { sr.textContent = lbl; sr.style.color = sig.color; }
-  var sv = document.getElementById('monSignalConf');    if (sv) sv.textContent = 'Confiança: ' + sig.confidence + '% | Projeção: ' + proj_r + ' carros';
+  var sv = document.getElementById('monSignalConf');    if (sv) sv.textContent = 'Confiança: ' + sig.confidence + '% | Projeção: ' + proj_r + ' carros' + modeTag;
 
-  monLog('🚨 SINAL: ' + lbl + ' (' + sig.confidence + '%)', sig.color);
+  monLog('🚨 SINAL: ' + lbl + ' (' + sig.confidence + '%)' + modeTag, sig.color);
   showToast('🚨 ' + lbl + '!');
 
   try {
     var fb = await fb_ref();
     await fb.addDoc(fb.collection(fb.db, 'usuarios/' + uid() + '/historico'), {
-      ev:'rodovia', label:'🚗 Rodovia — Auto', resultado:lbl,
+      ev:'rodovia', label:'🚗 Rodovia — Auto' + modeTag, resultado:lbl,
       conf:String(sig.confidence), tg:MON.signalMD, timeStr:ts, ts:fb.serverTimestamp()
     });
     monLog('✅ Salvo no histórico.', 'var(--green)');
@@ -1472,6 +1777,7 @@ function monitorStop(showUI) {
   MON.running = false;
   if (MON.bc)          { try { MON.bc.close(); } catch(e){} MON.bc = null; }
   if (MON.tickTimer)   { clearInterval(MON.tickTimer);  MON.tickTimer = null; }
+  if (MON.apiTimer)    { clearInterval(MON.apiTimer);   MON.apiTimer = null; }
   if (MON._noDataTimer){ clearTimeout(MON._noDataTimer); MON._noDataTimer = null; }
   if (showUI) {
     document.getElementById('monStartBtn').style.display = '';
@@ -1483,13 +1789,19 @@ function monitorStop(showUI) {
   }
 }
 
-// Inicializa bookmarklet após DOM pronto
+// Inicializa
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', monInitBookmarklet);
+  document.addEventListener('DOMContentLoaded', function() {
+    monInitBookmarklet();
+    setMonMode('api');
+    // Auto-search markets on load
+    setTimeout(function(){ apiFetchMarkets(); }, 500);
+  });
 } else {
   monInitBookmarklet();
+  setMonMode('api');
+  setTimeout(function(){ apiFetchMarkets(); }, 500);
 }
-
 </script>
 
 </body>
