@@ -529,6 +529,10 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
         <div id="apiSelectionsWrap" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;"></div>
       </div>
       <div id="apiStatusMsg" style="margin-top:10px;font-size:11px;font-family:var(--font-mono);color:var(--muted);"></div>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+        <button onclick="apiTestConnection()" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:var(--font-mono);font-size:11px;font-weight:700;cursor:pointer;">🔌 Testar Conexão</button>
+        <button onclick="apiFetchMarkets()" style="padding:8px 14px;border-radius:8px;border:1px solid var(--accent);background:rgba(0,212,255,.08);color:var(--accent);font-family:var(--font-mono);font-size:11px;font-weight:700;cursor:pointer;">🔄 Recarregar Eventos</button>
+      </div>
     </div>
   </div>
 
@@ -605,6 +609,10 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;hei
             <div id="monThresholdAte" style="font-size:26px;font-weight:900;color:var(--red);">—</div>
           </div>
         </div>
+      </div>
+      <!-- API Live Prices -->
+      <div id="apiLivePrices" style="display:none;margin-top:14px;">
+        <div style="font-size:10px;font-family:var(--font-mono);letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:8px;">💹 Preços Orderbook (Tempo Real)</div>
       </div>
     </div>
   </div>
@@ -1115,272 +1123,371 @@ document.addEventListener('DOMContentLoaded', function(){
 <script>
 // ═══════════════════════════════════════════════════════════════
 // MONITOR AUTOMÁTICO — RODOVIA PALPITA.IO  v7.0
-// MODO API (Palpita.io API oficial) + MODO BOOKMARKLET
+// MODO API: polling direto via API oficial Palpita.io
+// MODO BOOKMARKLET: Scraping via BroadcastChannel (fallback)
 // ═══════════════════════════════════════════════════════════════
 
 const MON = {
-  bc: null, tickTimer: null, apiTimer: null,
+  bc: null, tickTimer: null,
   readings: [],
   thresholdMais: null, thresholdAte: null,
   betClosesSec: null,
   signalFired: false,
   signalMD: '', signalBot: '',
   running: false,
-  mode: 'api', // 'api' | 'bookmarklet'
   eventId: '', eventSlug: '', currentUrl: '',
-  // API state
-  apiMarketId: null, apiSelectionId: null, apiMarketTitle: '',
-  apiOrderbook: null,
+  // API mode
+  mode: 'api',        // 'api' | 'bookmarklet'
+  apiMarketId: null,
+  apiSelectionId: null,
+  apiPollTimer: null,
+  apiToken: null,
+  apiLastEventTitle: '',
 };
 
-// ── API HELPERS ───────────────────────────────────────────────────
+// ── MODO SELECTOR ─────────────────────────────────────────────
+function setMonMode(mode) {
+  MON.mode = mode;
+  var btnApi = document.getElementById('modeApiBtn');
+  var btnBmk = document.getElementById('modeBmkBtn');
+  var panApi = document.getElementById('panelApi');
+  var panBmk = document.getElementById('panelBmk');
+  var sub    = document.getElementById('monSubtitle');
+  if (mode === 'api') {
+    if (btnApi) { btnApi.style.border = '2px solid var(--accent)'; btnApi.style.background = 'rgba(0,212,255,.1)'; btnApi.style.color = 'var(--accent)'; }
+    if (btnBmk) { btnBmk.style.border = '1px solid var(--border)'; btnBmk.style.background = 'transparent'; btnBmk.style.color = 'var(--muted)'; }
+    if (panApi) panApi.style.display = '';
+    if (panBmk) panBmk.style.display = 'none';
+    if (sub) sub.textContent = 'Modo API Palpita.io — polling direto, sem bookmarklet';
+  } else {
+    if (btnBmk) { btnBmk.style.border = '2px solid var(--accent3)'; btnBmk.style.background = 'rgba(124,58,237,.1)'; btnBmk.style.color = '#a78bfa'; }
+    if (btnApi) { btnApi.style.border = '1px solid var(--border)'; btnApi.style.background = 'transparent'; btnApi.style.color = 'var(--muted)'; }
+    if (panApi) panApi.style.display = 'none';
+    if (panBmk) panBmk.style.display = '';
+    if (sub) sub.textContent = 'Modo Bookmarklet — scraping via favorito do Chrome';
+    monInitBookmarklet();
+  }
+}
+
+// ── API PALPITA.IO ────────────────────────────────────────────
 function apiGetToken() {
-  var k = document.getElementById('apiKeyInput').value.trim();
-  var s = document.getElementById('apiSecretInput').value.trim();
-  if (!k || !s) return null;
-  return btoa(k + ':' + s);
+  var key    = (document.getElementById('apiKeyInput')    || {}).value || '';
+  var secret = (document.getElementById('apiSecretInput') || {}).value || '';
+  if (!key || !secret) return null;
+  return btoa(key.trim() + ':' + secret.trim());
 }
 
 function apiHeaders() {
-  var t = apiGetToken();
+  var token = apiGetToken();
   var h = { 'Accept': 'application/json', 'Content-Type': 'application/json' };
-  if (t) h['Authorization'] = 'Bearer ' + t;
+  if (token) h['Authorization'] = 'Bearer ' + token;
   return h;
 }
 
-var _apiSearchTimer = null;
+var _apiSearchTimeout = null;
 function apiSearchDebounce() {
-  clearTimeout(_apiSearchTimer);
-  _apiSearchTimer = setTimeout(apiFetchMarkets, 600);
+  clearTimeout(_apiSearchTimeout);
+  _apiSearchTimeout = setTimeout(apiFetchMarkets, 500);
+}
+
+// ── CORS-RESILIENT FETCH ──────────────────────────────────────────
+// Tenta direto → proxy1 → proxy2 automaticamente
+var PALPITA_BASE = 'https://app.palpita.io/api/v1';
+var _corsProxies = [
+  function(u){ return 'https://corsproxy.io/?' + encodeURIComponent(u); },
+  function(u){ return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u); },
+  function(u){ return 'https://thingproxy.freeboard.io/fetch/' + u; },
+];
+
+async function palpitaFetch(path, opts) {
+  opts = opts || {};
+  var hdrs = apiHeaders();
+  // Tenta direto primeiro (sem proxy)
+  var targets = [
+    { url: PALPITA_BASE + path, useProxy: false },
+  ];
+  // Adiciona proxies como fallback
+  _corsProxies.forEach(function(fn) {
+    targets.push({ url: fn(PALPITA_BASE + path), useProxy: true });
+  });
+
+  var lastErr = null;
+  for (var i = 0; i < targets.length; i++) {
+    try {
+      var fetchOpts = { method: opts.method || 'GET', headers: hdrs };
+      if (opts.body) fetchOpts.body = opts.body;
+      var res = await fetch(targets[i].url, fetchOpts);
+      if (!res.ok) { lastErr = new Error('HTTP ' + res.status); continue; }
+      var data = await res.json();
+      // Guarda qual proxy funcionou para usar nas próximas chamadas
+      if (targets[i].useProxy) {
+        MON._workingProxyIdx = i - 1; // índice no array _corsProxies
+        monLog('🔌 CORS proxy ativo: ' + targets[i].url.split('?')[0], 'var(--muted)');
+      } else {
+        MON._workingProxyIdx = -1;
+      }
+      return data;
+    } catch(e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error('Todas as tentativas falharam');
+}
+
+// Versão rápida que usa o proxy já conhecido (evita tentar direto toda vez)
+async function palpitaFetchFast(path, opts) {
+  if (MON._workingProxyIdx === undefined || MON._workingProxyIdx === -1) {
+    return palpitaFetch(path, opts); // descobre qual funciona
+  }
+  var url = _corsProxies[MON._workingProxyIdx](PALPITA_BASE + path);
+  var hdrs = apiHeaders();
+  var fetchOpts = { method: (opts && opts.method) || 'GET', headers: hdrs };
+  if (opts && opts.body) fetchOpts.body = opts.body;
+  var res = await fetch(url, fetchOpts);
+  if (!res.ok) {
+    // Proxy parou de funcionar — redescobre
+    MON._workingProxyIdx = undefined;
+    return palpitaFetch(path, opts);
+  }
+  return await res.json();
+}
+
+async function apiTestConnection() {
+  var msg = document.getElementById('apiStatusMsg');
+  if (msg) { msg.textContent = '⏳ Testando conexão...'; msg.style.color = 'var(--muted)'; }
+  // Força redescoberta do proxy
+  MON._workingProxyIdx = undefined;
+  try {
+    var data = await palpitaFetch('/categories');
+    var cats = Array.isArray(data) ? data : (data.items || data.data || []);
+    var proxyLabel = MON._workingProxyIdx === undefined || MON._workingProxyIdx === -1
+      ? 'direto'
+      : 'proxy ' + (MON._workingProxyIdx + 1);
+    if (msg) {
+      msg.textContent = '✅ Conectado via ' + proxyLabel + ' | ' + cats.length + ' categorias recebidas';
+      msg.style.color = 'var(--green)';
+    }
+    showToast('✅ API Palpita.io conectada!');
+    // Busca eventos automaticamente
+    apiFetchMarkets();
+  } catch(e) {
+    if (msg) {
+      msg.textContent = '❌ Falha em todos os proxies: ' + e.message + '. Use o Modo Bookmarklet.';
+      msg.style.color = 'var(--red)';
+    }
+    showToast('❌ API inacessível — use Bookmarklet', 'error');
+  }
 }
 
 async function apiFetchMarkets() {
-  var q = (document.getElementById('apiSearchInput').value || 'rodovia').trim();
+  var q = (document.getElementById('apiSearchInput') || {}).value || '';
   var msg = document.getElementById('apiStatusMsg');
   var list = document.getElementById('apiMarketList');
-  if (msg) msg.textContent = '⏳ Buscando eventos...';
+  if (msg) { msg.textContent = '🔍 Buscando mercados...'; msg.style.color = 'var(--muted)'; }
   if (list) list.style.display = 'none';
   try {
-    var url = 'https://app.palpita.io/api/v1/markets?status=OPEN&limit=20&search=' + encodeURIComponent(q) + '&orderBy=closesAt&orderDirection=ASC';
-    var res = await fetch(url, { headers: apiHeaders() });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    var data = await res.json();
-    var items = data.items || data || [];
-    if (!Array.isArray(items)) items = [];
-    renderApiMarkets(items);
-    if (msg) msg.textContent = items.length ? '✅ ' + items.length + ' evento(s) encontrado(s)' : '⚠️ Nenhum evento aberto encontrado.';
-  } catch(e) {
-    if (msg) msg.textContent = '❌ Erro: ' + e.message + ' — verifique CORS ou credenciais.';
-    monLog('❌ API erro: ' + e.message, 'var(--red)');
-  }
-}
-
-function renderApiMarkets(items) {
-  var wrap = document.getElementById('apiMarketItems');
-  var list = document.getElementById('apiMarketList');
-  if (!wrap || !list) return;
-  if (!items.length) { list.style.display = 'none'; return; }
-  wrap.innerHTML = items.map(function(m) {
-    var closes = m.closesAt ? new Date(m.closesAt).toLocaleString('pt-BR', {timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
-    var sels = (m.selections || []).map(function(s){ return s.name; }).join(' / ');
-    return '<div onclick="apiSelectMarket(' + m.id + ',\'' + esc(m.title||m.slug) + '\',' + JSON.stringify(m.selections||[]) + ',\'' + esc(m.slug) + '\')" style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;border-radius:8px;" onmouseover="this.style.background=\'rgba(0,212,255,.08)\'" onmouseout="this.style.background=\'transparent\'">'
-      + '<div style="font-size:12px;font-weight:700;color:var(--text);">' + esc(m.title||m.slug) + '</div>'
-      + '<div style="font-size:10px;color:var(--muted);font-family:var(--font-mono);margin-top:2px;">ID:' + m.id + ' | Fecha: ' + closes + ' | ' + esc(sels) + '</div>'
-      + '</div>';
-  }).join('');
-  list.style.display = '';
-}
-
-function apiSelectMarket(id, title, selections, slug) {
-  MON.apiMarketId = id;
-  MON.apiMarketTitle = title;
-  MON.eventId = String(id);
-  MON.eventSlug = slug || ('market-' + id);
-  MON.currentUrl = 'https://app.palpita.io/live/' + id + '-market/' + MON.eventSlug;
-
-  document.getElementById('apiMarketList').style.display = 'none';
-  document.getElementById('apiSelectedMarket').style.display = '';
-  document.getElementById('apiMarketTitle').textContent = title;
-  document.getElementById('apiMarketMeta').textContent = 'ID: ' + id + ' | ' + (selections.length) + ' seleção(ões)';
-
-  // Render selection buttons
-  var sw = document.getElementById('apiSelectionsWrap');
-  sw.innerHTML = '';
-  // Auto-select first selection, allow manual override
-  if (selections.length > 0) {
-    MON.apiSelectionId = selections[0].id;
-    selections.forEach(function(s, i) {
-      var btn = document.createElement('button');
-      btn.textContent = s.name;
-      btn.style.cssText = 'padding:6px 14px;border-radius:8px;border:1px solid ' + (i===0?'var(--accent)':'var(--border)') + ';background:' + (i===0?'rgba(0,212,255,.1)':'var(--bg)') + ';color:' + (i===0?'var(--accent)':'var(--muted)') + ';font-family:var(--font-head);font-size:11px;font-weight:700;cursor:pointer;transition:all .2s;';
-      btn.onclick = function() {
-        MON.apiSelectionId = s.id;
-        sw.querySelectorAll('button').forEach(function(b){ b.style.borderColor='var(--border)'; b.style.background='var(--bg)'; b.style.color='var(--muted)'; });
-        btn.style.borderColor='var(--accent)'; btn.style.background='rgba(0,212,255,.1)'; btn.style.color='var(--accent)';
-      };
-      sw.appendChild(btn);
-    });
-  }
-
-  var disp = document.getElementById('monUrlDisplay');
-  if (disp) { disp.textContent = MON.currentUrl; disp.style.color = 'var(--green)'; }
-  document.getElementById('apiStatusMsg').textContent = '✅ Pronto! Clique em ▶ Iniciar Monitor.';
-  monLog('✅ Evento selecionado: ' + title + ' (ID ' + id + ')', 'var(--green)');
-}
-
-// ── API POLLING ───────────────────────────────────────────────────
-async function apiPoll() {
-  if (!MON.running || MON.mode !== 'api') return;
-  if (!MON.apiMarketId) { monLog('⚠️ Selecione um evento primeiro.', 'var(--gold)'); return; }
-
-  try {
-    // 1. Fetch market details (closesAt = tempo restante proxy)
-    var mUrl = 'https://app.palpita.io/api/v1/markets/' + MON.apiMarketId;
-    var mRes = await fetch(mUrl, { headers: apiHeaders() });
-    if (!mRes.ok) throw new Error('Market HTTP ' + mRes.status);
-    var mData = await mRes.json();
-
-    // Compute seconds until closesAt
-    if (mData.closesAt) {
-      var diff = Math.round((new Date(mData.closesAt) - Date.now()) / 1000);
-      MON.betClosesSec = Math.max(0, diff);
-    }
-
-    // Market status check
-    if (mData.status && mData.status !== 'OPEN') {
-      monLog('🔒 Mercado ' + mData.status + ' — aguardando próximo ciclo...', 'var(--gold)');
+    var path = '/markets?status=OPEN&limit=50&orderBy=closesAt&orderDirection=ASC';
+    if (q) path += '&search=' + encodeURIComponent(q);
+    var data = await palpitaFetch(path);
+    var items = Array.isArray(data) ? data : (data.items || []);
+    if (!items.length) {
+      if (msg) { msg.textContent = '⚠️ Nenhum evento aberto encontrado.'; msg.style.color = 'var(--gold)'; }
       return;
     }
-
-    // 2. Fetch orderbook
-    var obUrl = 'https://app.palpita.io/api/v1/orderbook?marketId=' + MON.apiMarketId + '&limit=10';
-    var obRes = await fetch(obUrl, { headers: apiHeaders() });
-    if (!obRes.ok) throw new Error('Orderbook HTTP ' + obRes.status);
-    var obData = await obRes.json();
-
-    // Process orderbook to extract "count" proxy via best bid prices
-    processOrderbook(obData, mData);
-
+    if (msg) { msg.textContent = '✅ ' + items.length + ' eventos encontrados'; msg.style.color = 'var(--green)'; }
+    var container = document.getElementById('apiMarketItems');
+    if (container) {
+      container.innerHTML = items.map(function(m) {
+        var closes = m.closesAt ? new Date(m.closesAt).toLocaleString('pt-BR', {timeZone:'America/Sao_Paulo', hour:'2-digit', minute:'2-digit'}) : '—';
+        var selJson = JSON.stringify(m.selections || []).replace(/"/g,'&quot;');
+        var titleSafe = (m.title||'').replace(/'/g,'&#39;');
+        return '<div onclick="apiSelectMarket(' + m.id + ',\'' + titleSafe + '\',JSON.parse(this.dataset.sel))" data-sel="' + selJson + '" ' +
+          'style="padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);margin-bottom:6px;cursor:pointer;transition:all .15s;" ' +
+          'onmouseover="this.style.borderColor=\'var(--accent)\'" onmouseout="this.style.borderColor=\'var(--border)\'">' +
+          '<div style="font-size:12px;font-weight:700;color:var(--text);">' + (m.title||'') + '</div>' +
+          '<div style="font-size:10px;color:var(--muted);font-family:var(--font-mono);margin-top:3px;">ID: ' + m.id + ' | Fecha: ' + closes + ' | ' + (m.selections||[]).length + ' seleções</div>' +
+          '</div>';
+      }).join('');
+    }
+    if (list) list.style.display = '';
   } catch(e) {
-    monLog('❌ API poll: ' + e.message, 'var(--red)');
+    if (msg) { msg.textContent = '❌ Erro: ' + e.message + ' — verifique a URL da API ou tente o Modo Bookmarklet.'; msg.style.color = 'var(--red)'; }
   }
 }
 
-function processOrderbook(ob, market) {
-  if (!ob || !ob.selections || !ob.selections.length) return;
+function apiSelectMarket(id, title, selections) {
+  MON.apiMarketId = id;
+  MON.apiLastEventTitle = title;
+  MON.apiSelectionId = null;
 
-  // Find the target selection (user-selected or first)
-  var targetSel = null;
-  if (MON.apiSelectionId) {
-    targetSel = ob.selections.find(function(s){ return s.selectionId === MON.apiSelectionId; });
-  }
-  if (!targetSel) targetSel = ob.selections[0];
-  if (!targetSel) return;
+  var sel = document.getElementById('apiSelectedMarket');
+  var tit = document.getElementById('apiMarketTitle');
+  var met = document.getElementById('apiMarketMeta');
+  var sw  = document.getElementById('apiSelectionsWrap');
+  var list = document.getElementById('apiMarketList');
 
-  // Best bid price = probability the market assigns to this outcome
-  // For Rodovia: "MAIS DE X carros" → we treat best bid as market's implied probability
-  var bestBid = null, bestAsk = null;
-  if (targetSel.bids && targetSel.bids.length > 0) bestBid = parseFloat(targetSel.bids[0].price);
-  if (targetSel.asks && targetSel.asks.length > 0) bestAsk = parseFloat(targetSel.asks[0].price);
+  if (sel) sel.style.display = '';
+  if (tit) tit.textContent = title;
+  if (met) met.textContent = 'Market ID: ' + id + ' | ' + selections.length + ' seleções';
+  if (list) list.style.display = 'none';
 
-  // Mid price as probability (0-1)
-  var mid = null;
-  if (bestBid !== null && bestAsk !== null) mid = (bestBid + bestAsk) / 2;
-  else if (bestBid !== null) mid = bestBid;
-  else if (bestAsk !== null) mid = bestAsk;
-
-  // Extract thresholds from selection names
-  // Expected names like "Mais de 150" / "Até 150" or similar
-  ob.selections.forEach(function(s) {
-    if (!s.name) return;
-    var maisM = s.name.match(/[Mm]ais\s+de\s+(\d+)/);
-    if (maisM) MON.thresholdMais = parseInt(maisM[1]);
-    var ateM = s.name.match(/[Aa]t[ée]\s+(\d+)/);
-    if (ateM) MON.thresholdAte = parseInt(ateM[1]);
-  });
-
-  // Build a "count" proxy:
-  // If we have thresholds, use mid price * (thresholdMais - thresholdAte) + thresholdAte
-  // Otherwise use mid price * 200 as a raw proxy
-  var count = null;
-  if (mid !== null) {
-    if (MON.thresholdMais !== null && MON.thresholdAte !== null) {
-      // Scale mid into the threshold range
-      count = Math.round(MON.thresholdAte + mid * (MON.thresholdMais - MON.thresholdAte + MON.thresholdMais * 0.1));
+  if (sw) {
+    if (selections.length === 0) {
+      sw.innerHTML = '<span style="font-size:11px;color:var(--muted);font-family:var(--font-mono);">Sem seleções — monitoramento por orderbook</span>';
+    } else if (selections.length === 2) {
+      // Para mercados binários como Rodovia (MAIS / ATÉ), auto-detecta
+      sw.innerHTML = '<span style="font-size:11px;color:var(--green);font-family:var(--font-mono);">✅ Seleções detectadas automaticamente: ' +
+        selections.map(function(s){ return s.name; }).join(' / ') + '</span>';
+      // guarda ambas as seleções para mapear mais/até depois
+      MON._apiSelections = selections;
     } else {
-      count = Math.round(mid * 300);
+      sw.innerHTML = selections.map(function(s) {
+        return '<button onclick="apiPickSelection(' + s.id + ',\'' + (s.name||'').replace(/'/g,"\\'") + '\')" ' +
+          'style="padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:var(--font-head);font-size:12px;font-weight:700;cursor:pointer;">' +
+          s.name + ' (ID:' + s.id + ')</button>';
+      }).join('');
     }
   }
 
-  // Build extra info log
-  var bidQty  = targetSel.bids && targetSel.bids[0] ? targetSel.bids[0].quantity : '—';
-  var askQty  = targetSel.asks && targetSel.asks[0] ? targetSel.asks[0].quantity : '—';
-  var prob    = mid !== null ? Math.round(mid * 100) : '?';
+  var url = 'https://app.palpita.io/live/' + id + '-market/' + (title||'').toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'');
+  MON.currentUrl = url;
+  var disp = document.getElementById('monUrlDisplay');
+  if (disp) { disp.textContent = url; disp.style.color = 'var(--green)'; }
+  showToast('✅ Mercado selecionado: ' + title.substring(0,30));
+}
 
-  // Detect if new market cycle (market ID changed)
-  if (market && String(market.id) !== MON.eventId) {
-    MON.eventId = String(market.id);
-    MON.readings = []; MON.signalFired = false;
-    monLog('🔄 Novo ciclo detectado: ID ' + market.id, 'var(--accent)');
+function apiPickSelection(id, name) {
+  MON.apiSelectionId = id;
+  var sw = document.getElementById('apiSelectionsWrap');
+  if (sw) sw.innerHTML = '<span style="font-size:11px;color:var(--green);font-family:var(--font-mono);">✅ Seleção: ' + name + ' (ID:' + id + ')</span>';
+}
+
+// ── POLLING DA API ────────────────────────────────────────────
+async function apiPollOnce() {
+  if (!MON.running || MON.mode !== 'api') return;
+  if (!MON.apiMarketId) {
+    monLog('⚠️ Nenhum mercado selecionado.', 'var(--gold)');
+    return;
   }
+  try {
+    // Busca orderbook (rota pública)
+    var ob = await palpitaFetchFast('/orderbook?marketId=' + MON.apiMarketId + '&limit=10');
 
-  if (count !== null && !isNaN(count)) {
-    MON.readings.push({ ts: Date.now(), count: count });
-    if (MON.readings.length > 80) MON.readings = MON.readings.slice(-80);
-    monUpdateUI(count);
-    monUpdateThr();
-    var proj = monProj();
-    if (proj !== null) monUpdateBar(proj);
-    monLog(
-      '📊 ' + (targetSel.name || 'Sel') +
-      ' | Bid: ' + (bestBid !== null ? bestBid.toFixed(3) : '—') + ' (x' + bidQty + ')' +
-      ' | Ask: ' + (bestAsk !== null ? bestAsk.toFixed(3) : '—') + ' (x' + askQty + ')' +
-      ' | Prob: ' + prob + '%' +
-      ' | Proxy carros: ' + count +
-      ' | Apostas: ' + (MON.betClosesSec !== null ? MON.betClosesSec + 's' : '?') +
-      ' | Proj: ' + (proj !== null ? Math.round(proj) : '?') +
-      ' | #' + MON.readings.length,
-      'var(--text)'
-    );
-    monCheckTrigger();
-    monSt('📡', 'API ao vivo', MON.readings.length + ' leituras | ID: ' + MON.eventId, 'var(--green)');
+    // Dados do mercado (fechamento)
+    var mkt = null;
+    try { mkt = await palpitaFetchFast('/markets/' + MON.apiMarketId); } catch(e) {}
+
+    // Detectar fechamento de apostas pelo status
+    if (mkt) {
+      if (mkt.status === 'FROZEN' || mkt.status === 'RESOLVED') {
+        monLog('🔒 Mercado encerrado: ' + mkt.status, 'var(--gold)');
+        MON.betClosesSec = 0;
+      }
+      if (mkt.closesAt) {
+        var closes = new Date(mkt.closesAt);
+        var now    = new Date();
+        var diffSec = Math.max(0, Math.round((closes - now) / 1000));
+        MON.betClosesSec = diffSec;
+      }
+    }
+
+    // Extrair preços do orderbook
+    if (ob && ob.selections && ob.selections.length > 0) {
+      var sels = ob.selections;
+
+      // Mapear MAIS DE / ATÉ pelas seleções
+      var selMais = null, selAte = null;
+      sels.forEach(function(s) {
+        var n = (s.name || '').toLowerCase();
+        if (n.includes('mais') || n.includes('over') || n.includes('acima') || n.includes('sim')) selMais = s;
+        else if (n.includes('até') || n.includes('ate') || n.includes('under') || n.includes('menos') || n.includes('não') || n.includes('nao')) selAte = s;
+      });
+      if (!selMais && sels.length >= 1) selMais = sels[0];
+      if (!selAte  && sels.length >= 2) selAte  = sels[1];
+
+      function bestPrice(s) {
+        if (!s) return null;
+        var bid = (s.bids && s.bids.length) ? parseFloat(s.bids[0].price) : null;
+        var ask = (s.asks && s.asks.length) ? parseFloat(s.asks[0].price) : null;
+        // Preferência: melhor bid (mercado real), fallback ask
+        return bid || ask;
+      }
+
+      var pMais = bestPrice(selMais);
+      var pAte  = bestPrice(selAte);
+
+      if (pMais !== null && pAte !== null) {
+        var total = pMais + pAte;
+        var probMais = total > 0 ? pMais / total : 0.5;
+        var virtualCount = Math.round(probMais * 100);
+
+        MON.thresholdMais = 60;
+        MON.thresholdAte  = 40;
+
+        var fakeData = {
+          id:         String(MON.apiMarketId),
+          slug:       MON.apiLastEventTitle,
+          url:        MON.currentUrl,
+          count:      virtualCount,
+          mais:       MON.thresholdMais,
+          ate:        MON.thresholdAte,
+          bet:        MON.betClosesSec,
+          _pMais:     pMais,
+          _pAte:      pAte,
+          _probMais:  probMais,
+        };
+
+        monLog(
+          '💹 ' + (selMais ? selMais.name : 'SIM') + '@R$' + (pMais*100).toFixed(1) + '¢ | ' +
+          (selAte  ? selAte.name  : 'NÃO') + '@R$' + (pAte*100).toFixed(1) + '¢' +
+          ' | Prob: ' + (probMais*100).toFixed(1) + '% | Aposta: ' + (MON.betClosesSec != null ? MON.betClosesSec + 's' : '?'),
+          'var(--text)'
+        );
+
+        monReceive(fakeData);
+      } else if (pMais !== null) {
+        // Só tem uma seleção com preço
+        var virtualCount2 = Math.round(pMais * 100);
+        MON.thresholdMais = 60; MON.thresholdAte = 40;
+        monLog('⚠️ Apenas 1 lado com preço — usando prob simples: ' + (pMais*100).toFixed(1) + '%', 'var(--gold)');
+        monReceive({ id: String(MON.apiMarketId), count: virtualCount2, mais: 60, ate: 40, bet: MON.betClosesSec });
+      } else {
+        monLog('⚠️ Orderbook sem preços — aguardando liquidez.', 'var(--gold)');
+      }
+    } else {
+      monLog('⚠️ Orderbook vazio — mercado sem atividade.', 'var(--gold)');
+    }
+  } catch(e) {
+    monLog('❌ Erro API: ' + e.message, 'var(--red)');
   }
 }
 
-// ── MODO SELECTOR ─────────────────────────────────────────────────
-function setMonMode(mode) {
-  MON.mode = mode;
-  var apiBtn  = document.getElementById('modeApiBtn');
-  var bmkBtn  = document.getElementById('modeBmkBtn');
-  var panelApi = document.getElementById('panelApi');
-  var panelBmk = document.getElementById('panelBmk');
-  var subtitle = document.getElementById('monSubtitle');
-
-  if (mode === 'api') {
-    apiBtn.style.border = '2px solid var(--accent)';
-    apiBtn.style.background = 'rgba(0,212,255,.1)';
-    apiBtn.style.color = 'var(--accent)';
-    bmkBtn.style.border = '1px solid var(--border)';
-    bmkBtn.style.background = 'transparent';
-    bmkBtn.style.color = 'var(--muted)';
-    if (panelApi) panelApi.style.display = '';
-    if (panelBmk) panelBmk.style.display = 'none';
-    if (subtitle) subtitle.textContent = 'Modo API — dados direto da Palpita.io sem bookmarklet';
-  } else {
-    bmkBtn.style.border = '2px solid var(--accent3)';
-    bmkBtn.style.background = 'rgba(124,58,237,.1)';
-    bmkBtn.style.color = '#a78bfa';
-    apiBtn.style.border = '1px solid var(--border)';
-    apiBtn.style.background = 'transparent';
-    apiBtn.style.color = 'var(--muted)';
-    if (panelBmk) panelBmk.style.display = '';
-    if (panelApi) panelApi.style.display = 'none';
-    if (subtitle) subtitle.textContent = 'Modo Bookmarklet — scraping via favorito do Chrome';
-  }
+// ── API STATUS na UI (exibe preços reais) ─────────────────────
+var MON_API_PANEL_EL = null;
+function apiShowPrices(pMais, pAte, probMais) {
+  var el = document.getElementById('apiLivePrices');
+  if (!el) return;
+  el.style.display = '';
+  el.innerHTML =
+    '<div style="display:flex;gap:10px;">' +
+    '<div style="flex:1;text-align:center;background:rgba(0,230,118,.08);border:1px solid rgba(0,230,118,.2);border-radius:8px;padding:8px;">' +
+      '<div style="font-size:9px;color:var(--muted);font-family:var(--font-mono);">MAIS DE (bid)</div>' +
+      '<div style="font-size:20px;font-weight:900;color:var(--green);">R$' + (pMais*100).toFixed(1) + '¢</div>' +
+      '<div style="font-size:10px;color:var(--muted);">' + (probMais*100).toFixed(1) + '%</div>' +
+    '</div>' +
+    '<div style="flex:1;text-align:center;background:rgba(255,61,90,.08);border:1px solid rgba(255,61,90,.2);border-radius:8px;padding:8px;">' +
+      '<div style="font-size:9px;color:var(--muted);font-family:var(--font-mono);">ATÉ (bid)</div>' +
+      '<div style="font-size:20px;font-weight:900;color:var(--red);">R$' + (pAte*100).toFixed(1) + '¢</div>' +
+      '<div style="font-size:10px;color:var(--muted);">' + ((1-probMais)*100).toFixed(1) + '%</div>' +
+    '</div>' +
+    '</div>';
 }
+
 
 // ── BOOKMARKLET ───────────────────────────────────────────────────
+// Este código vai rodar no contexto do palpita.io quando clicado
 function monBuildBookmarklet() {
+  // Construído como string para evitar qualquer problema de escape
   var parts = [
     '(function(){',
     'var CH="sinalpro-rodovia";',
@@ -1388,16 +1495,22 @@ function monBuildBookmarklet() {
     'var bc=new BroadcastChannel(CH);',
     'function scrape(){',
     '  var d={ts:Date.now()};',
+    // URL -> eventId
     '  var sm=location.href.match(/rodovia-5-minutos-qu-(\\d+)/);',
     '  if(sm){d.id=sm[1];d.slug="rodovia-5-minutos-qu-"+sm[1];d.url=location.href;}',
+    // Texto completo da página
     '  var txt=document.body.innerText||"";',
+    // Contagem: número após "CONTAGEM ATUAL"
     '  var cm=txt.match(/CONTAGEM[\\s\\S]{0,20}?\\n(\\d{1,4})\\n/i)||txt.match(/^(\\d{1,4})$/m);',
     '  if(cm)d.count=parseInt(cm[1]);',
+    // Tempo apostas: "01:42" perto de ENCERRAM
     '  var tm=txt.match(/ENCERRAM[\\s\\S]{0,20}?(\\d{1,2}):(\\d{2})/i);',
     '  if(tm)d.bet=parseInt(tm[1])*60+parseInt(tm[2]);',
     '  if(/encerradas/i.test(txt))d.bet=0;',
+    // Thresholds
     '  var mm=txt.match(/[Mm]ais\\s+de\\s+(\\d+)/);if(mm)d.mais=parseInt(mm[1]);',
     '  var am=txt.match(/[Aa]t[\\u00e9e]\\s+(\\d+)/);if(am)d.ate=parseInt(am[1]);',
+    // __NEXT_DATA__ JSON (mais preciso)
     '  var nd=document.getElementById("__NEXT_DATA__");',
     '  if(nd){try{',
     '    var j=nd.textContent;',
@@ -1407,6 +1520,7 @@ function monBuildBookmarklet() {
     '    var ao=j.match(/"ate":(\\d+)/)||j.match(/"threshold_ate":(\\d+)/);if(ao)d.ate=parseInt(ao[1]);',
     '  }catch(e){}}',
     '  bc.postMessage(d);',
+    // Badge visual
     '  var fb=document.getElementById("_sp_badge");',
     '  if(!fb){fb=document.createElement("div");fb.id="_sp_badge";',
     '  fb.style="position:fixed;bottom:16px;right:16px;background:#7c3aed;color:#fff;padding:8px 16px;border-radius:100px;font-size:12px;font-weight:700;z-index:99999;font-family:monospace;";',
@@ -1415,6 +1529,7 @@ function monBuildBookmarklet() {
     '}',
     'scrape();',
     'window._sp=setInterval(scrape,2000);',
+    // Toast de confirmação
     'var t=document.createElement("div");',
     't.style="position:fixed;top:20px;right:20px;background:#00e676;color:#000;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:700;z-index:99999;";',
     't.textContent="✅ SinalPRO ativado!";',
@@ -1465,11 +1580,22 @@ function monitorStart() {
     return;
   }
 
+  // Validação modo API
+  if (MON.mode === 'api') {
+    if (!MON.apiMarketId) {
+      showToast('⚠️ Selecione um evento antes de iniciar.', 'error');
+      monLog('⚠️ Selecione um mercado no Modo API primeiro.', 'var(--gold)');
+      return;
+    }
+  }
+
   monitorStop(false);
   MON.running = true;
   MON.readings = []; MON.signalFired = false;
   MON.thresholdMais = null; MON.thresholdAte = null;
   MON.betClosesSec = null;
+  MON.eventId = String(MON.apiMarketId || '');
+  MON.eventSlug = '';
 
   document.getElementById('monStartBtn').style.display = 'none';
   document.getElementById('monStopBtn').style.display = '';
@@ -1478,55 +1604,53 @@ function monitorStart() {
   document.getElementById('monSignalCard').style.display = 'none';
 
   if (MON.mode === 'api') {
-    // API mode
-    if (!MON.apiMarketId) {
-      showToast('⚠️ Selecione um evento na API primeiro!', 'error');
-      monLog('⚠️ Nenhum evento selecionado.', 'var(--red)');
-      monitorStop(true);
-      return;
-    }
-    var interval = (parseInt(document.getElementById('monPollInterval').value) || 3) * 1000;
-    monLog('🌐 Modo API — polling a cada ' + (interval/1000) + 's | Mercado ID: ' + MON.apiMarketId, 'var(--accent)');
-    monSt('⏳', 'Conectando via API...', 'Buscando dados...', 'var(--gold)');
-    apiPoll(); // first immediate poll
-    MON.apiTimer = setInterval(apiPoll, interval);
+    // ── MODO API ──
+    var disp = document.getElementById('monUrlDisplay');
+    if (disp) { disp.textContent = '🌐 API: Market ID ' + MON.apiMarketId + ' — ' + MON.apiLastEventTitle; disp.style.color = 'var(--accent)'; }
+    monLog('🌐 Modo API iniciado | Market ID: ' + MON.apiMarketId, 'var(--accent)');
+    monSt('🌐', 'Conectando via API...', 'Market ID: ' + MON.apiMarketId, 'var(--accent)');
+
+    var interval = parseInt((document.getElementById('monPollInterval') || {}).value) || 3;
+    // Primeiro poll imediato
+    apiPollOnce();
+    MON.apiPollTimer = setInterval(apiPollOnce, interval * 1000);
+    MON.tickTimer    = setInterval(monTick, 1000);
+
   } else {
-    // Bookmarklet mode
-    if (!MON.eventId) {
-      MON.eventId = ''; MON.eventSlug = ''; MON.currentUrl = '';
-      var disp = document.getElementById('monUrlDisplay');
-      if (disp) { disp.textContent = 'Aguardando bookmarklet...'; disp.style.color = 'var(--muted)'; }
-    }
+    // ── MODO BOOKMARKLET ──
+    var disp2 = document.getElementById('monUrlDisplay');
+    if (disp2) { disp2.textContent = 'Aguardando bookmarklet...'; disp2.style.color = 'var(--muted)'; }
     try {
       MON.bc = new BroadcastChannel('sinalpro-rodovia');
-      MON.bc.onmessage = function(e) { if (MON.running) monReceive(e.data); };
-      monLog('📡 Canal aberto. Vá ao palpita.io e clique no favorito ⚡ SinalPRO Monitor', 'var(--accent)');
+      MON.bc.onmessage = function(e) {
+        if (MON.running) monReceive(e.data);
+      };
+      monLog('📡 Canal aberto. Agora vá ao palpita.io e clique no favorito ⚡ SinalPRO Monitor', 'var(--accent)');
       monSt('⏳', 'Aguardando scraping...', 'Clique no favorito na aba do palpita.io', 'var(--gold)');
     } catch(e) {
       monLog('❌ BroadcastChannel indisponível: ' + e.message, 'var(--red)');
       monSt('❌', 'Erro', 'Use Chrome ou Edge', 'var(--red)');
-      monitorStop(true);
       return;
     }
+    MON.tickTimer = setInterval(monTick, 1000);
     MON._noDataTimer = setTimeout(function() {
       if (MON.readings.length === 0 && MON.running) {
         monLog('⚠️ Sem dados em 20s — o bookmarklet foi ativado na aba do palpita.io?', 'var(--gold)');
       }
     }, 20000);
   }
-
-  MON.tickTimer = setInterval(monTick, 1000);
 }
 
-// ── RECEBER DADOS DO BOOKMARKLET ──────────────────────────────────
+// ── RECEBER DADOS (Bookmarklet ou API) ────────────────────────────
 function monReceive(data) {
   if (!data || !MON.running) return;
 
+  // Novo evento detectado
   if (data.id && data.id !== MON.eventId) {
     var isNew = MON.eventId !== '';
     MON.eventId   = data.id;
     MON.eventSlug = data.slug || ('rodovia-5-minutos-qu-' + data.id);
-    MON.currentUrl = data.url || ('https://app.palpita.io/live/' + data.id + '-market/' + MON.eventSlug);
+    MON.currentUrl = data.url || MON.currentUrl || ('https://app.palpita.io/live/' + data.id);
     var disp = document.getElementById('monUrlDisplay');
     if (disp) { disp.textContent = MON.currentUrl; disp.style.color = 'var(--green)'; }
     if (isNew) {
@@ -1541,10 +1665,17 @@ function monReceive(data) {
     }
   }
 
+  // Thresholds e tempo
   if (data.mais != null) MON.thresholdMais = Number(data.mais);
   if (data.ate  != null) MON.thresholdAte  = Number(data.ate);
   if (data.bet  != null) MON.betClosesSec  = Number(data.bet);
 
+  // Exibir preços da API (se disponível)
+  if (data._pMais != null && data._pAte != null) {
+    apiShowPrices(data._pMais, data._pAte, data._probMais);
+  }
+
+  // Contagem
   var count = data.count != null ? Number(data.count) : null;
   if (count !== null && !isNaN(count) && count >= 0 && count < 10000) {
     MON.readings.push({ts: Date.now(), count: count});
@@ -1553,15 +1684,18 @@ function monReceive(data) {
     monUpdateThr();
     var proj = monProj();
     if (proj !== null) monUpdateBar(proj);
-    monLog(
-      '🚗 ' + count + ' carros' +
-      ' | Apostas: ' + (MON.betClosesSec != null ? MON.betClosesSec : '?') + 's' +
-      ' | Proj: ' + (proj != null ? Math.round(proj) : '?') +
-      ' | #' + MON.readings.length,
-      'var(--text)'
-    );
+    if (MON.mode === 'bookmarklet') {
+      monLog(
+        '🚗 ' + count + ' carros' +
+        ' | Apostas: ' + (MON.betClosesSec != null ? MON.betClosesSec : '?') + 's' +
+        ' | Proj: ' + (proj != null ? Math.round(proj) : '?') +
+        ' | #' + MON.readings.length,
+        'var(--text)'
+      );
+    }
     monCheckTrigger();
-    monSt('📡', 'Monitorando ao vivo', MON.readings.length + ' leituras | ID: ' + MON.eventId, 'var(--green)');
+    monSt('📡', MON.mode === 'api' ? 'API ao vivo' : 'Monitorando ao vivo',
+      MON.readings.length + ' leituras | ID: ' + MON.eventId, 'var(--green)');
   } else if (MON.thresholdMais || MON.thresholdAte) {
     monUpdateThr();
   }
@@ -1683,19 +1817,24 @@ async function monFireSignal() {
   if (!sig.result) { monLog('⚠️ Thresholds não detectados.', 'var(--gold)'); return; }
 
   var thr    = sig.result === 'MAIS DE' ? MON.thresholdMais : MON.thresholdAte;
-  var lbl    = sig.result + ' ' + thr + ' CARROS';
+  var lbl    = sig.result === 'MAIS DE'
+    ? (MON.mode === 'api' ? '📈 MAIS PROVÁVEL' : 'MAIS DE ' + thr + ' CARROS')
+    : (MON.mode === 'api' ? '📉 MENOS PROVÁVEL' : 'ATÉ ' + thr + ' CARROS');
   var url    = MON.currentUrl;
   var brt    = new Date(new Date().toLocaleString('en-US',{timeZone:'America/Sao_Paulo'}));
   var ts     = brt.toLocaleString('pt-BR');
   var titulo = sig.result === 'MAIS DE' ? '🔥 SINAL FORTE' : '💎 ENTRADA PREMIUM';
   var S      = '━━━━━━━━━━━━━━━━━━━━';
   var proj_r = Math.round(proj);
-  var modeTag = MON.mode === 'api' ? ' [API]' : ' [Bookmarklet]';
+  var eventName = MON.apiLastEventTitle || '🚗 Rodovia — 5 minutos';
+  var confExtra = MON.mode === 'api'
+    ? '\n__💹 Prob MAIS:__ **' + proj_r + '%**'
+    : '\n__🚗 Projeção:__ **' + proj_r + ' carros**';
 
   MON.signalMD =
-    '**' + titulo + ' — 🚗 Rodovia — 5 minutos**\n' + S + '\n' +
+    '**' + titulo + ' — ' + eventName + '**\n' + S + '\n' +
     '__🎯 Resultado:__ **' + lbl + '**\n' +
-    '__🚗 Projeção:__ **' + proj_r + ' carros**\n' +
+    confExtra + '\n' +
     '__📊 Confiança:__ **' + sig.confidence + '%**\n' +
     '__🕒 Horário:__ ' + ts + ' BRT\n' + S + '\n' +
     (CFG.showEntrada ? '⚡ **Entrada válida AGORA**\n' : '') +
@@ -1706,9 +1845,11 @@ async function monFireSignal() {
   var eH = function(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
 
   MON.signalBot =
-    '<b>' + titulo + ' — 🚗 Rodovia — 5 minutos</b>\n' + S + '\n' +
-    '<u>🎯 Resultado:</u> <b>' + lbl + '</b>\n' +
-    '<u>🚗 Projeção:</u> <b>' + proj_r + ' carros</b>\n' +
+    '<b>' + titulo + ' — ' + eH(eventName) + '</b>\n' + S + '\n' +
+    '<u>🎯 Resultado:</u> <b>' + eH(lbl) + '</b>\n' +
+    (MON.mode === 'api'
+      ? '<u>💹 Prob MAIS:</u> <b>' + proj_r + '%</b>\n'
+      : '<u>🚗 Projeção:</u> <b>' + proj_r + ' carros</b>\n') +
     '<u>📊 Confiança:</u> <b>' + sig.confidence + '%</b>\n' +
     '<u>🕒 Horário:</u> ' + ts + ' BRT\n' + S + '\n' +
     (CFG.showEntrada ? '⚡ <b>Entrada válida AGORA</b>\n' : '') +
@@ -1718,15 +1859,15 @@ async function monFireSignal() {
 
   var sc = document.getElementById('monSignalCard');    if (sc) sc.style.display = '';
   var sr = document.getElementById('monSignalResult');  if (sr) { sr.textContent = lbl; sr.style.color = sig.color; }
-  var sv = document.getElementById('monSignalConf');    if (sv) sv.textContent = 'Confiança: ' + sig.confidence + '% | Projeção: ' + proj_r + ' carros' + modeTag;
+  var sv = document.getElementById('monSignalConf');    if (sv) sv.textContent = 'Confiança: ' + sig.confidence + '% | Projeção: ' + proj_r + ' carros';
 
-  monLog('🚨 SINAL: ' + lbl + ' (' + sig.confidence + '%)' + modeTag, sig.color);
+  monLog('🚨 SINAL: ' + lbl + ' (' + sig.confidence + '%)', sig.color);
   showToast('🚨 ' + lbl + '!');
 
   try {
     var fb = await fb_ref();
     await fb.addDoc(fb.collection(fb.db, 'usuarios/' + uid() + '/historico'), {
-      ev:'rodovia', label:'🚗 Rodovia — Auto' + modeTag, resultado:lbl,
+      ev:'rodovia', label:'🚗 Rodovia — Auto', resultado:lbl,
       conf:String(sig.confidence), tg:MON.signalMD, timeStr:ts, ts:fb.serverTimestamp()
     });
     monLog('✅ Salvo no histórico.', 'var(--green)');
@@ -1775,10 +1916,10 @@ function monCopySignal() {
 function monitorStop(showUI) {
   if (showUI === undefined) showUI = true;
   MON.running = false;
-  if (MON.bc)          { try { MON.bc.close(); } catch(e){} MON.bc = null; }
-  if (MON.tickTimer)   { clearInterval(MON.tickTimer);  MON.tickTimer = null; }
-  if (MON.apiTimer)    { clearInterval(MON.apiTimer);   MON.apiTimer = null; }
-  if (MON._noDataTimer){ clearTimeout(MON._noDataTimer); MON._noDataTimer = null; }
+  if (MON.bc)           { try { MON.bc.close(); } catch(e){} MON.bc = null; }
+  if (MON.tickTimer)    { clearInterval(MON.tickTimer);   MON.tickTimer = null; }
+  if (MON.apiPollTimer) { clearInterval(MON.apiPollTimer); MON.apiPollTimer = null; }
+  if (MON._noDataTimer) { clearTimeout(MON._noDataTimer); MON._noDataTimer = null; }
   if (showUI) {
     document.getElementById('monStartBtn').style.display = '';
     document.getElementById('monStopBtn').style.display = 'none';
@@ -1794,14 +1935,12 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', function() {
     monInitBookmarklet();
     setMonMode('api');
-    // Auto-search markets on load
-    setTimeout(function(){ apiFetchMarkets(); }, 500);
   });
 } else {
   monInitBookmarklet();
   setMonMode('api');
-  setTimeout(function(){ apiFetchMarkets(); }, 500);
 }
+
 </script>
 
 </body>
