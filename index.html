@@ -799,7 +799,7 @@ function applySession(matched){
   // Fade out login screen
   const screen=document.getElementById('loginScreen');
   screen.classList.add('fading');
-  setTimeout(()=>{screen.style.display='none'; initUserData();},420);
+  setTimeout(()=>{screen.style.display='none'; initUserData(); evEnsureStarted();},420);
 }
 
 function doLogout(){
@@ -822,8 +822,8 @@ function doLogout(){
     document.getElementById('logoutBtn').classList.add('visible');
     document.querySelectorAll('.admin-only').forEach(el=>el.style.display=r==='admin'?'':'none');
     // init after Firebase ready
-    if(window._fbReady) window._fbReady.then(()=>initUserData());
-    else window.addEventListener('fbReady',()=>initUserData());
+    if(window._fbReady) window._fbReady.then(()=>{ initUserData(); evEnsureStarted(); });
+    else window.addEventListener('fbReady',()=>{ initUserData(); evEnsureStarted(); });
   } else {
     setTimeout(()=>{const el=document.getElementById('loginUser');if(el)el.focus();},200);
   }
@@ -1098,51 +1098,82 @@ document.addEventListener('DOMContentLoaded', function(){
 <!-- MONITOR + EVENTOS SCRIPT -->
 <script>
 // ═══════════════════════════════════════════════════════════════
-// SINALPRO v8.0 — API Palpita.io
+// SINALPRO v8.1 — API Palpita.io
 // ═══════════════════════════════════════════════════════════════
 
-// ── API FETCH (público — sem auth, cascata de proxies) ────────
+// ── CREDENCIAIS ───────────────────────────────────────────────
+var _API_KEY    = 'pk_GK4RetJhwa3SVHU66xw3PY7qgKradErV';
+var _API_SECRET = 'sk_cyWfLFzQnoO6ZuvODnyrXicEUiYDlfyXfy5buUiXp9A5t5NS';
+var _API_TOKEN  = btoa(_API_KEY + ':' + _API_SECRET);
 var PALPITA_BASE = 'https://app.palpita.io/api/v1';
-var _proxies = [
+
+// ── PROXY CASCATA ─────────────────────────────────────────────
+// Índice 0 = chamada direta (com auth)
+// Índice 1..n = proxies públicos (sem auth — headers customizados bloqueados)
+var _proxyFns = [
+  // Sem proxy — direto com Authorization
+  null,
+  // corsproxy.io — mais confiável para GitHub Pages
   function(u){ return 'https://corsproxy.io/?' + encodeURIComponent(u); },
+  // allorigins — retorna {contents: "..."}
   function(u){ return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u); },
+  // codetabs
   function(u){ return 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u); },
-  function(u){ return 'https://thingproxy.freeboard.io/fetch/' + u; },
 ];
-var _workingProxy = undefined; // undefined=desconhecido, 0=direto, 1..n=proxy i-1
+var _workingProxy = undefined; // undefined = ainda não sabe
 
 async function palpitaGet(path) {
   var full = PALPITA_BASE + path;
-  var targets = [full].concat(_proxies.map(function(fn){ return fn(full); }));
-  // Se já temos um caminho funcionando, começa por ele
-  var start = (_workingProxy !== undefined) ? _workingProxy : 0;
-  var order = [start];
-  for (var i = 0; i < targets.length; i++) { if (i !== start) order.push(i); }
 
+  // Ordem: começa pelo último que funcionou
+  var order = [];
+  if (_workingProxy !== undefined) order.push(_workingProxy);
+  for (var i = 0; i < _proxyFns.length; i++) {
+    if (i !== _workingProxy) order.push(i);
+  }
+
+  var errors = [];
   for (var oi = 0; oi < order.length; oi++) {
     var idx = order[oi];
     try {
-      var res = await fetch(targets[idx], { headers: { 'Accept': 'application/json' } });
-      if (!res.ok) { if (idx === _workingProxy) _workingProxy = undefined; continue; }
+      var url, hdrs;
+      if (idx === 0) {
+        // Direto com Authorization
+        url  = full;
+        hdrs = { 'Accept': 'application/json', 'Authorization': 'Bearer ' + _API_TOKEN };
+      } else {
+        // Via proxy — sem Authorization (proxies bloqueiam headers customizados)
+        url  = _proxyFns[idx](full);
+        hdrs = { 'Accept': 'application/json' };
+      }
+
+      var res = await fetch(url, { method: 'GET', headers: hdrs });
+      if (!res.ok) {
+        errors.push('idx'+idx+': HTTP '+res.status);
+        if (idx === _workingProxy) _workingProxy = undefined;
+        continue;
+      }
       var text = await res.text();
-      // allorigins embala em {status,contents}
-      if (targets[idx].includes('allorigins')) {
-        try { var wrap = JSON.parse(text); if (wrap.contents) text = wrap.contents; } catch(e){}
+      // allorigins embala: {"status":{"..."},"contents":"JSON aqui"}
+      if (idx > 0 && _proxyFns[idx] && _proxyFns[idx](full).includes('allorigins')) {
+        try { var w = JSON.parse(text); if (w && w.contents) text = w.contents; } catch(e){}
       }
       var data = JSON.parse(text);
       _workingProxy = idx;
       return data;
     } catch(e) {
+      errors.push('idx'+idx+': '+e.message);
       if (idx === _workingProxy) _workingProxy = undefined;
     }
   }
-  throw new Error('API inacessível — todos os caminhos falharam');
+  console.error('[SinalPRO] palpitaGet falhou:', errors);
+  throw new Error('API inacessível (' + errors.slice(-1)[0] + ')');
 }
 
 function proxyLabel() {
   if (_workingProxy === undefined) return '?';
-  if (_workingProxy === 0) return 'direto';
-  return 'proxy #' + _workingProxy;
+  if (_workingProxy === 0) return 'direto ✓';
+  return 'proxy #' + _workingProxy + ' ✓';
 }
 
 // ── PARSE RESPONSE ────────────────────────────────────────────
@@ -1182,47 +1213,64 @@ function evSetStatus(ok, label) {
 
 async function evFetch(manual) {
   try {
+    evSetStatus(false, 'Atualizando...');
     // Busca categorias e mercados em paralelo
-    var [catData, mktData] = await Promise.all([
+    var results = await Promise.allSettled([
       palpitaGet('/categories'),
       palpitaGet('/markets?status=OPEN&limit=100&orderBy=closesAt&orderDirection=ASC')
     ]);
-    EV.categories = Array.isArray(catData) ? catData : parseItems(catData);
-    EV.markets    = parseItems(mktData);
+
+    var catResult = results[0];
+    var mktResult = results[1];
+
+    if (catResult.status === 'fulfilled') {
+      EV.categories = Array.isArray(catResult.value) ? catResult.value : parseItems(catResult.value);
+    }
+    if (mktResult.status === 'rejected') {
+      throw new Error(mktResult.reason && mktResult.reason.message ? mktResult.reason.message : 'Falha ao buscar mercados');
+    }
+    EV.markets = parseItems(mktResult.value);
 
     // Atualiza filtro de categorias
     var catSel = document.getElementById('evCatFilter');
     if (catSel && EV.categories.length) {
       var cur = catSel.value;
       catSel.innerHTML = '<option value="">Todas categorias</option>' +
-        EV.categories.map(function(c){ return '<option value="'+c.id+'">'+ c.name +'</option>'; }).join('');
+        EV.categories.map(function(c){ return '<option value="'+c.id+'">'+c.name+'</option>'; }).join('');
       catSel.value = cur;
     }
 
     // Stats
     var g = function(id){ return document.getElementById(id); };
-    if (g('evCountOpen')) g('evCountOpen').textContent = EV.markets.length;
-    if (g('evCountCats')) g('evCountCats').textContent = EV.categories.length;
+    if (g('evCountOpen'))  g('evCountOpen').textContent  = EV.markets.length;
+    if (g('evCountCats'))  g('evCountCats').textContent  = EV.categories.length;
     if (g('eventosBadge')) g('eventosBadge').textContent = EV.markets.length;
+    if (g('evProxyLabel')) g('evProxyLabel').textContent = proxyLabel();
 
     // Próximo a fechar
     if (EV.markets.length) {
       var soonest = EV.markets.reduce(function(a,b){
         return new Date(a.closesAt||'9999') < new Date(b.closesAt||'9999') ? a : b;
       });
-      var closes = soonest.closesAt ? new Date(soonest.closesAt).toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'}) : '—';
+      var closes = soonest.closesAt
+        ? new Date(soonest.closesAt).toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'})
+        : '—';
       if (g('evNextClose')) g('evNextClose').textContent = closes;
     }
 
-    // Timestamp
     var now = new Date().toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo'});
-    if (g('evLastUpdate')) g('evLastUpdate').textContent = 'Última atualização: ' + now + ' | auto-refresh 10s';
+    if (g('evLastUpdate')) g('evLastUpdate').textContent = 'Atualizado: ' + now + ' | proxy: ' + proxyLabel() + ' | auto-refresh 10s';
 
-    evSetStatus(true, 'Conectado');
+    evSetStatus(true, 'Conectado — ' + EV.markets.length + ' eventos');
     evRender();
   } catch(e) {
-    evSetStatus(false, 'Erro: ' + e.message.substring(0, 40));
-    if (manual) showToast('❌ ' + e.message, 'error');
+    console.error('[SinalPRO] evFetch error:', e);
+    evSetStatus(false, 'Erro: ' + (e.message||'').substring(0,50));
+    var g2 = document.getElementById('evGrid');
+    if (g2 && !EV.markets.length) {
+      g2.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px 20px;color:var(--red);font-family:var(--font-mono);font-size:12px;">❌ '+( e.message||'Erro desconhecido')+'<br><br><span style="color:var(--muted);">Verifique o console do browser (F12) para detalhes.</span></div>';
+    }
+    if (manual) showToast('❌ ' + (e.message||'Erro'), 'error');
   }
 }
 
@@ -1724,8 +1772,16 @@ function monitorStop(showUI) {
 
 // ── INIT ─────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function() {
+  // Inicia polling de eventos imediatamente ao carregar
   evStartPolling();
 });
+
+// Hook: também chama evStartPolling quando o login for feito
+// (o login chama doLogin que exibe o app — precisamos garantir que os eventos já estejam carregando)
+var _evStarted = false;
+function evEnsureStarted() {
+  if (!_evStarted) { _evStarted = true; evStartPolling(); }
+}
 
 // Fecha modal ao clicar fora
 document.addEventListener('click', function(e) {
