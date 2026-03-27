@@ -1177,12 +1177,23 @@ function proxyLabel() { return _workerOk ? 'worker ⚡' : '?'; }
 // ── PARSE RESPONSE ────────────────────────────────────────────
 function parseItems(data) {
   if (Array.isArray(data)) return data;
+  // {"success":true,"data":{"items":[...]}} — estrutura real da Palpita
+  if (data && data.data && Array.isArray(data.data.items)) return data.data.items;
+  if (data && data.data && Array.isArray(data.data))       return data.data;
   if (data && Array.isArray(data.items)) return data.items;
-  if (data && Array.isArray(data.data)) return data.data;
+  if (data && Array.isArray(data.data))  return data.data;
+  // busca qualquer array aninhado
   if (data && typeof data === 'object') {
     var keys = Object.keys(data);
     for (var i = 0; i < keys.length; i++) {
-      if (Array.isArray(data[keys[i]])) return data[keys[i]];
+      var v = data[keys[i]];
+      if (Array.isArray(v)) return v;
+      if (v && typeof v === 'object') {
+        var subkeys = Object.keys(v);
+        for (var j = 0; j < subkeys.length; j++) {
+          if (Array.isArray(v[subkeys[j]])) return v[subkeys[j]];
+        }
+      }
     }
   }
   return [];
@@ -1212,7 +1223,6 @@ function evSetStatus(ok, label) {
 async function evFetch(manual) {
   try {
     evSetStatus(false, 'Atualizando...');
-    // Busca categorias e mercados em paralelo
     var results = await Promise.allSettled([
       palpitaGet('/categories'),
       palpitaGet('/markets?status=OPEN&limit=100&orderBy=closesAt&orderDirection=ASC')
@@ -1221,13 +1231,17 @@ async function evFetch(manual) {
     var catResult = results[0];
     var mktResult = results[1];
 
+    // Debug: loga estrutura bruta
     if (catResult.status === 'fulfilled') {
-      EV.categories = Array.isArray(catResult.value) ? catResult.value : parseItems(catResult.value);
+      diagAdd('📦 /categories raw: ' + JSON.stringify(catResult.value).substring(0, 120));
+      EV.categories = parseItems(catResult.value);
     }
     if (mktResult.status === 'rejected') {
       throw new Error(mktResult.reason && mktResult.reason.message ? mktResult.reason.message : 'Falha ao buscar mercados');
     }
+    diagAdd('📦 /markets raw: ' + JSON.stringify(mktResult.value).substring(0, 200));
     EV.markets = parseItems(mktResult.value);
+    diagAdd('✅ Mercados extraídos: ' + EV.markets.length);
 
     // Atualiza filtro de categorias
     var catSel = document.getElementById('evCatFilter');
