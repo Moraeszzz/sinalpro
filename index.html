@@ -1177,25 +1177,11 @@ function proxyLabel() { return _workerOk ? 'worker ⚡' : '?'; }
 // ── PARSE RESPONSE ────────────────────────────────────────────
 function parseItems(data) {
   if (Array.isArray(data)) return data;
-  // {"success":true,"data":{"items":[...]}} — estrutura real da Palpita
-  if (data && data.data && Array.isArray(data.data.items)) return data.data.items;
-  if (data && data.data && Array.isArray(data.data))       return data.data;
+  // Estrutura real: {"items":[...], "total":N, ...}
   if (data && Array.isArray(data.items)) return data.items;
-  if (data && Array.isArray(data.data))  return data.data;
-  // busca qualquer array aninhado
-  if (data && typeof data === 'object') {
-    var keys = Object.keys(data);
-    for (var i = 0; i < keys.length; i++) {
-      var v = data[keys[i]];
-      if (Array.isArray(v)) return v;
-      if (v && typeof v === 'object') {
-        var subkeys = Object.keys(v);
-        for (var j = 0; j < subkeys.length; j++) {
-          if (Array.isArray(v[subkeys[j]])) return v[subkeys[j]];
-        }
-      }
-    }
-  }
+  // Wrapper do Worker: {"success":true,"data":{"items":[...]}}
+  if (data && data.data && Array.isArray(data.data.items)) return data.data.items;
+  if (data && data.data && Array.isArray(data.data)) return data.data;
   return [];
 }
 
@@ -1231,17 +1217,30 @@ async function evFetch(manual) {
     var catResult = results[0];
     var mktResult = results[1];
 
-    // Debug: loga estrutura bruta
+    // Categorias
     if (catResult.status === 'fulfilled') {
-      diagAdd('📦 /categories raw: ' + JSON.stringify(catResult.value).substring(0, 120));
+      diagAdd('📦 /categories: ' + JSON.stringify(catResult.value).substring(0, 100));
       EV.categories = parseItems(catResult.value);
     }
+
+    // Mercados
     if (mktResult.status === 'rejected') {
       throw new Error(mktResult.reason && mktResult.reason.message ? mktResult.reason.message : 'Falha ao buscar mercados');
     }
     diagAdd('📦 /markets raw: ' + JSON.stringify(mktResult.value).substring(0, 200));
     EV.markets = parseItems(mktResult.value);
     diagAdd('✅ Mercados extraídos: ' + EV.markets.length);
+
+    // Se não há eventos OPEN, tenta buscar FROZEN também (pode haver em andamento)
+    if (EV.markets.length === 0) {
+      diagAdd('ℹ️ Sem eventos OPEN — buscando FROZEN...');
+      try {
+        var frozen = await palpitaGet('/markets?status=FROZEN&limit=20');
+        var frozenItems = parseItems(frozen);
+        diagAdd('📦 FROZEN: ' + frozenItems.length + ' eventos');
+        EV.markets = frozenItems;
+      } catch(e) { diagAdd('⚠️ FROZEN falhou: ' + e.message); }
+    }
 
     // Atualiza filtro de categorias
     var catSel = document.getElementById('evCatFilter');
@@ -1299,7 +1298,10 @@ function evRender() {
   });
 
   if (!list.length) {
-    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--muted);font-family:var(--font-mono);">Nenhum evento encontrado.</div>';
+    var emptyMsg = EV.markets.length === 0
+      ? '<div style="font-size:32px;margin-bottom:12px;">😴</div><div style="font-size:14px;font-weight:800;color:var(--text);margin-bottom:8px;">Sem eventos ativos agora</div><div style="font-size:11px;color:var(--muted);line-height:1.8;">Eventos de Rodovia disponíveis das 09h às 23h30 BRT<br>Atualizando automaticamente a cada 10 segundos...</div>'
+      : '<div style="font-size:14px;">Nenhum evento com este filtro.</div>';
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px 20px;font-family:var(--font-mono);">'+emptyMsg+'</div>';
     return;
   }
 
